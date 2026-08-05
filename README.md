@@ -5,7 +5,7 @@ Servicio backend del proyecto **Alejandría**.
 ## Stack
 
 - **Django** (Python)
-- **PostgreSQL**
+- **SQLite3**
 
 ## Alcance
 
