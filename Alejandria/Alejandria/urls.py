@@ -27,5 +27,8 @@ urlpatterns = [
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0)),
     
     # Rutas de nuestra aplicación
-    path('biblioteca/', include('biblioteca.Categorias.urlsCategorias')),
+    path('biblioteca/Categorias/', include('biblioteca.Categorias.urlsCategorias')),
+    path('biblioteca/libros/', include('biblioteca.Libros.urlsLibros')),
+    path('biblioteca/usuarios/', include('biblioteca.Usuarios.urlsUsuarios')),
+    path('biblioteca/prestamos/', include('biblioteca.Prestamos.urlsPrestamos')),
 ]

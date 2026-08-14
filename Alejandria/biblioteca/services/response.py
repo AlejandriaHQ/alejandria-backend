@@ -15,12 +15,7 @@ class Result():
                           'previous': False, 'next': False, "status": HTTP_400_BAD_REQUEST})
 
     def Error(Mensaje):
-        return Response({"success": False, "Mensaje": Mensaje, "datos":"", "status": HTTP_400_BAD_REQUEST})
-
-class ListError():
-    Mensaje=[]
-    def Error(Mensaje=[]):
-        return Response({"success": False, "Mensaje": Mensaje, "datos":"", "status": HTTP_400_BAD_REQUEST})
+        return Response({"success": False, "Mensaje": Mensaje, "datos": "", "status": HTTP_400_BAD_REQUEST})
 
 def TryCatch(action_to_execute, *args, **kwargs):
     try:

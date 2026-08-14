@@ -1,20 +1,17 @@
-from django.shortcuts import render
-
-from .serializersCategorias import CategoriasSerializer ,CategoriasSerializerReg, CategoriasSerializerUpdate, CategoriasSerializerDelete, LibroSerializerReg, LibroSerializerUpdate, LibroSerializerDelete, UsuarioSerializerReg
+from .serializersCategorias import CategoriasSerializer, CategoriasSerializerReg, CategoriasSerializerUpdate, CategoriasSerializerDelete
 from rest_framework.decorators import api_view
-from biblioteca.models import Libro, Categoria, Usuario, Prestamo
+from biblioteca.models import Categoria
 from rest_framework.response import Response
-from rest_framework.status import HTTP_200_OK,HTTP_201_CREATED
+from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
-from django.db.models import Q
+from django.db.models import Q, ProtectedError
 from django.core.paginator import Paginator
-from ..services.response import Result,TryCatch,ListError
-
-# Create your views here.
-
+from ..services.response import Result, TryCatch
 
 #Categorias Views
+
+
 @api_view(['GET'])
 def categorias_list(request):
     def action_to_execute():
@@ -25,55 +22,57 @@ def categorias_list(request):
     return TryCatch(action_to_execute)
 
 
-
 pk_paramView = openapi.Parameter(
-    'id_categoria', openapi.IN_QUERY,
-     description="ID de la categoría", 
-     type=openapi.TYPE_INTEGER)
+    'id_categoria',
+    openapi.IN_QUERY,
+    description="ID de la categoría",
+    type=openapi.TYPE_INTEGER,
+)
+
 
 @swagger_auto_schema(
-        method='get', operation_description="Obtener una categoría por su ID", manual_parameters=[pk_paramView], responses={200: 'Exitoso', 400: 'Error'})
+    method='get',
+    operation_description="Obtener una categoría por su ID",
+    manual_parameters=[pk_paramView],
+    responses={200: 'Exitoso', 400: 'Error'})
 
 @api_view(['GET'])
 def Categoria_View(request):
-    id=request.GET.get('id_categoria')
-    query =Q(id_categoria__icontains=id) 
-    categoria =Categoria.objects.all().filter(query)
-    serialData= CategoriasSerializer(categoria, many=True)
+    id = request.GET.get('id_categoria')
+    if not id:
+        return Result.Error("Complete la casilla del ID de la categoria")
 
-    return Result.Exitosa("",serialData.data, HTTP_200_OK)
+    categoria = Categoria.objects.filter(id_categoria=id)
+    serialData = CategoriasSerializer(categoria, many=True)
+
+    return Result.Exitosa("", serialData.data, HTTP_200_OK)
+
 
 @swagger_auto_schema(
     method='post',
     operation_description='Añade una nueva categoria.',
     request_body=CategoriasSerializerReg,
-    responses={200: 'Exitoso', 400: 'Error'}
-)
+    responses={200: 'Exitoso', 400: 'Error'})
 
 @api_view(['POST'])
 def Categoria_Add(request):
+    errores = []
+
     nombre = request.data.get('nombre')
-    descripcion = request.data.get('descripcion')
-
-    ListError.Mensaje.clear()
     if not nombre:
-        ListError.Mensaje.append("Complete la casilla nombre")
-    if not descripcion:
-        ListError.Mensaje.append("Complete la casilla descripcion")
+        errores.append("Complete la casilla nombre")
 
-    
-    if ListError.Mensaje:
-        return Result.Error(ListError.Mensaje)
+    if errores:
+        return Result.Error(errores)
 
     serialData = CategoriasSerializerReg(data=request.data)
 
-    if serialData.is_valid():
-        serialData.save()
-    else:
-        Result.Error("Complete los campos vacios")
+    if not serialData.is_valid():
+        return Result.Error("Complete los campos vacios")
 
-    return Result.Exitosa("Se registro correctamente", {}, HTTP_201_CREATED)
+    serialData.save()
 
+    return Result.Exitosa("Se registro correctamente", serialData.data, HTTP_201_CREATED)
 
 
 @swagger_auto_schema(
@@ -84,37 +83,33 @@ def Categoria_Add(request):
 
 @api_view(['PUT'])
 def Categoria_Update(request):
+    errores = []
+
     pk = request.data.get('id_categoria')
-
     nombre = request.data.get('nombre')
-    descripcion = request.data.get('descripcion')
 
-    ListError.Mensaje.clear()
-    if not nombre: 
-        ListError.Mensaje.append("Complete la casilla nombre")
+    if not pk:
+        errores.append("Complete la casilla del ID de la categoria")
+    if not nombre:
+        errores.append("Complete la casilla nombre")
 
-    if not descripcion: 
-        ListError.Mensaje.append("Complete la casilla descripcion")
+    if errores:
+        return Result.Error(errores)
 
-    if ListError.Mensaje:
-        return Result.Error(ListError.Mensaje)
-    
-    categoria = Categoria.objects.get(id_categoria=pk)
-    serialData=CategoriasSerializerUpdate(instance=categoria, data=request.data)
+    try:
+        categoria = Categoria.objects.get(id_categoria=pk)
+    except Categoria.DoesNotExist:
+        return Result.Error("La categoria no existe")
 
-    if serialData.is_valid():
-        serialData.save()
-    else:
+    serialData = CategoriasSerializerUpdate(instance=categoria, data=request.data)
+
+    if not serialData.is_valid():
         return Result.Error("Complete los campos vacios")
 
-    return Result.Exitosa("Se actualizo correctamente", {}, HTTP_201_CREATED)
+    serialData.save()
 
-pk_paramView = openapi.Parameter(
-    'id_categoria',
-    openapi.IN_QUERY,
-    description="ID Categoria",
-    type=openapi.TYPE_INTEGER,
-)
+    return Result.Exitosa("Se actualizo correctamente", serialData.data, HTTP_200_OK)
+
 
 @swagger_auto_schema(
     method='delete',
@@ -124,19 +119,22 @@ pk_paramView = openapi.Parameter(
 
 @api_view(['DELETE'])
 def Categoria_Delete(request):
-    
-    pk=request.GET.get('id_categoria')
-    ListError.Mensaje.clear()
+    pk = request.GET.get('id_categoria')
     if not pk:
-        ListError.Mensaje.append("Complete la casilla del ID de la categoria")
-    
-    if ListError.Mensaje:
-        return Result.Error(ListError.Mensaje)
+        return Result.Error("Complete la casilla del ID de la categoria")
 
-    categoria = Categoria.objects.get(id_categoria=pk)
+    try:
+        categoria = Categoria.objects.get(id_categoria=pk)
+    except Categoria.DoesNotExist:
+        return Result.Error("La categoria no existe")
 
-    categoria.delete()
+    try:
+        categoria.delete()
+    except ProtectedError:
+        return Result.Error("No se puede eliminar: la categoria tiene libros asociados")
+
     return Result.Exitosa("Se elimino correctamente", {}, HTTP_200_OK)
+
 
 page_paramView = openapi.Parameter(
     'page',
@@ -156,43 +154,35 @@ filter_paramView = openapi.Parameter(
 @swagger_auto_schema(
     method='get',
     operation_description="Buscar",
-    manual_parameters=[page_paramView,filter_paramView],
+    manual_parameters=[page_paramView, filter_paramView],
     responses={200: 'Exitoso', 400: 'Error'})
 
 @api_view(['GET'])
 def Categoria_Paginators(request):
     page = request.GET.get('page')
     pagesize = 10
-    filter= request.GET.get('filter')
-
-    showPages = int(pagesize)
+    filter = request.GET.get('filter')
 
     if filter:
-        query = Q(id_categoria__icontains=filter) | \
-                Q(nombre__icontains=filter) | \
-                Q(descripcion__icontains=filter) 
+        query = Q(nombre__icontains=filter) | \
+                Q(descripcion__icontains=filter)
 
-
-        cont = Categoria.objects.filter(query)
-
+        cont = Categoria.objects.filter(query).order_by('id_categoria')
     else:
-        cont =  Categoria.objects.all().order_by('id_categoria')
+        cont = Categoria.objects.all().order_by('id_categoria')
 
-    paginator = Paginator(cont, showPages)
+    paginator = Paginator(cont, pagesize)
     total_pages = paginator.num_pages
 
     try:
-        page = int('page')
-    except ValueError:
+        page = int(page)
+    except (ValueError, TypeError):
         page = 1
 
     if page > total_pages or page < 1:
-        return Result.ErrorResponsePaginator("No se encuentra esta página",total_pages,page)
+        return Result.ErrorResponsePaginator("No se encuentra esta página", total_pages, page)
 
-    if page == total_pages and paginator.num_pages % showPages != 0:
-        page_obj = paginator.page(total_pages)
-    else:
-        page_obj = paginator.page(page)
+    page_obj = paginator.page(page)
 
     if page == total_pages:
         button_previous = True
@@ -200,10 +190,10 @@ def Categoria_Paginators(request):
     elif page <= 1:
         button_previous = False
         button_next = True
-    elif page < total_pages:
+    else:
         button_previous = True
         button_next = True
 
     serialdata = CategoriasSerializer(page_obj, many=True)
 
-    return Result.ResponsePaginator('',serialdata.data, total_pages, page, button_previous, button_next)
+    return Result.ResponsePaginator('', serialdata.data, total_pages, page, button_previous, button_next)
