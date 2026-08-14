@@ -62,7 +62,7 @@ INSTALLED_APPS = [
     'drf_yasg',
 
     #LA app 
-    'Alejandria',
+    'biblioteca',
 ]
 
 MIDDLEWARE = [
