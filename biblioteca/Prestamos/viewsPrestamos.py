@@ -87,11 +87,13 @@ def Prestamo_Add(request):
             # Regla de stock: se valida disponibilidad y se decrementa el stock
             # de forma atómica dentro de una transacción (select_for_update bloquea
             # la fila del libro para evitar condiciones de carrera concurrentes).
+            #
+            # NOTA: no se captura Libro.DoesNotExist aquí. id_libro es un
+            # PrimaryKeyRelatedField del serializer, por lo que un id inexistente
+            # hace fallar is_valid() con 400 antes de llegar a este bloque; el
+            # 400 de DRF ya cubre ese caso (código muerto eliminado).
             with transaction.atomic():
-                try:
-                    libro = Libro.objects.select_for_update().get(pk=id_libro)
-                except Libro.DoesNotExist:
-                    return Result.Error("Libro no encontrado", 404)
+                libro = Libro.objects.select_for_update().get(pk=id_libro)
 
                 if libro.cantidad < 1:
                     return Result.Error("No hay ejemplares disponibles de este libro", 400)
