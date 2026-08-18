@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.hashers import make_password, check_password
+from django.core.validators import MinValueValidator
 
 
 # MODELO: Categorias
@@ -23,7 +24,7 @@ class Libro(models.Model):
     titulo = models.CharField(max_length=150)
     autor = models.CharField(max_length=150)
     isbn = models.CharField(max_length=20, unique=True, blank=True, null=True)
-    cantidad = models.IntegerField(default=1)
+    cantidad = models.IntegerField(default=1, validators=[MinValueValidator(1)])
     id_categoria = models.ForeignKey(
         Categoria,
         on_delete=models.PROTECT,  # No permite eliminar categoría con libros asociados
