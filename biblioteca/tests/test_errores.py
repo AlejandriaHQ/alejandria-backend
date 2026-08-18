@@ -21,41 +21,49 @@ from biblioteca.tests.helpers import BaseAPITest
 class CategoriasErroresTests(BaseAPITest):
     """Errores del recurso Categorias."""
 
-    def test_view_sin_id(self):
-        response = self.client.get(reverse('Categoria_view'))
-
-        self.assert_envelope_error(response)
-
     def test_view_inexistente(self):
-        url = f"{reverse('Categoria_view')}?id_categoria=9999"
-        response = self.client.get(url)
+        response = self.client.get(reverse('categoria-detail', args=[9999]))
 
         self.assert_envelope_error(response, HTTP_404_NOT_FOUND)
 
     def test_update_inexistente(self):
         response = self.client.put(
-            reverse('Categoria_update'),
-            {'id_categoria': 9999, 'nombre': 'Ficción', 'descripcion': 'd'},
+            reverse('categoria-detail', args=[9999]),
+            {'nombre': 'Ficción', 'descripcion': 'd'},
             format='json',
         )
 
         self.assert_envelope_error(response, HTTP_404_NOT_FOUND)
 
     def test_delete_inexistente(self):
-        url = f"{reverse('Categoria_delete')}?id_categoria=9999"
-        response = self.client.delete(url)
+        response = self.client.delete(reverse('categoria-detail', args=[9999]))
 
         self.assert_envelope_error(response, HTTP_404_NOT_FOUND)
 
     def test_crear_sin_nombre(self):
         response = self.client.post(
-            reverse('Categoria_add'), {'descripcion': 'sin nombre'}, format='json')
+            reverse('categoria-list'), {'descripcion': 'sin nombre'}, format='json')
 
         self.assert_envelope_error(response)
 
-    def test_update_sin_id(self):
+    def test_update_sin_nombre(self):
+        categoria = self.crear_categoria(nombre='Ficción')
+
         response = self.client.put(
-            reverse('Categoria_update'), {'nombre': 'Ficción'}, format='json')
+            reverse('categoria-detail', args=[categoria.id_categoria]),
+            {'descripcion': 'solo descripcion'},
+            format='json',
+        )
+
+        self.assert_envelope_error(response)
+
+    def test_eliminar_categoria_con_libros_asociados(self):
+        # ProtectedError: no se puede eliminar una categoría con libros.
+        categoria = self.crear_categoria(nombre='Ficción')
+        self.crear_libro(titulo='Dune', isbn='978-1', categoria=categoria)
+
+        response = self.client.delete(
+            reverse('categoria-detail', args=[categoria.id_categoria]))
 
         self.assert_envelope_error(response)
 
@@ -70,7 +78,7 @@ class LibrosErroresTests(BaseAPITest):
         self.crear_libro(titulo='Dune', isbn='978-1', categoria=self.categoria)
 
         response = self.client.post(
-            reverse('Libro_add'),
+            reverse('libro-list'),
             {'titulo': 'Otro libro', 'autor': 'Otro autor', 'isbn': '978-1',
              'id_categoria': self.categoria.id_categoria},
             format='json',
@@ -83,7 +91,7 @@ class LibrosErroresTests(BaseAPITest):
 
     def test_cantidad_cero(self):
         response = self.client.post(
-            reverse('Libro_add'),
+            reverse('libro-list'),
             {'titulo': 'Dune', 'autor': 'Frank Herbert', 'isbn': '978-2',
              'cantidad': 0, 'id_categoria': self.categoria.id_categoria},
             format='json',
@@ -93,7 +101,7 @@ class LibrosErroresTests(BaseAPITest):
 
     def test_cantidad_negativa(self):
         response = self.client.post(
-            reverse('Libro_add'),
+            reverse('libro-list'),
             {'titulo': 'Dune', 'autor': 'Frank Herbert', 'isbn': '978-3',
              'cantidad': -3, 'id_categoria': self.categoria.id_categoria},
             format='json',
@@ -103,7 +111,7 @@ class LibrosErroresTests(BaseAPITest):
 
     def test_crear_sin_campos_requeridos(self):
         response = self.client.post(
-            reverse('Libro_add'),
+            reverse('libro-list'),
             {'titulo': 'Dune', 'id_categoria': self.categoria.id_categoria},
             format='json',
         )
@@ -111,15 +119,14 @@ class LibrosErroresTests(BaseAPITest):
         self.assert_envelope_error(response)
 
     def test_view_inexistente(self):
-        url = f"{reverse('Libro_view')}?id_libro=9999"
-        response = self.client.get(url)
+        response = self.client.get(reverse('libro-detail', args=[9999]))
 
         self.assert_envelope_error(response, HTTP_404_NOT_FOUND)
 
     def test_update_inexistente(self):
         response = self.client.put(
-            reverse('Libro_update'),
-            {'id_libro': 9999, 'titulo': 'Dune', 'autor': 'A',
+            reverse('libro-detail', args=[9999]),
+            {'titulo': 'Dune', 'autor': 'A',
              'id_categoria': self.categoria.id_categoria},
             format='json',
         )
@@ -127,15 +134,14 @@ class LibrosErroresTests(BaseAPITest):
         self.assert_envelope_error(response, HTTP_404_NOT_FOUND)
 
     def test_delete_inexistente(self):
-        url = f"{reverse('Libro_delete')}?id_libro=9999"
-        response = self.client.delete(url)
+        response = self.client.delete(reverse('libro-detail', args=[9999]))
 
         self.assert_envelope_error(response, HTTP_404_NOT_FOUND)
 
     def test_pagina_fuera_de_rango(self):
         # Un envelope de error de paginación debe ser consistente con
         # Result.Error: 'datos' es None (no string vacío).
-        url = f"{reverse('Libro_paginator')}?page=99"
+        url = f"{reverse('libro-paginar')}?page=99"
         response = self.client.get(url)
 
         self.assert_envelope_error(response)
@@ -152,7 +158,7 @@ class UsuariosErroresTests(BaseAPITest):
         self.crear_usuario(correo='juan@test.com')
 
         response = self.client.post(
-            reverse('Usuario_add'),
+            reverse('usuario-list'),
             {'nombre': 'Juan', 'apellido': 'Perez', 'correo': 'juan@test.com',
              'contrasena': 'otra-clave-1'},
             format='json',
@@ -165,7 +171,7 @@ class UsuariosErroresTests(BaseAPITest):
 
     def test_crear_sin_contrasena(self):
         response = self.client.post(
-            reverse('Usuario_add'),
+            reverse('usuario-list'),
             {'nombre': 'Juan', 'apellido': 'Perez', 'correo': 'juan@test.com'},
             format='json',
         )
@@ -173,15 +179,14 @@ class UsuariosErroresTests(BaseAPITest):
         self.assert_envelope_error(response)
 
     def test_view_inexistente(self):
-        url = f"{reverse('Usuario_view')}?id_usuario=9999"
-        response = self.client.get(url)
+        response = self.client.get(reverse('usuario-detail', args=[9999]))
 
         self.assert_envelope_error(response, HTTP_404_NOT_FOUND)
 
     def test_update_inexistente(self):
         response = self.client.put(
-            reverse('Usuario_update'),
-            {'id_usuario': 9999, 'nombre': 'Juan', 'apellido': 'Perez',
+            reverse('usuario-detail', args=[9999]),
+            {'nombre': 'Juan', 'apellido': 'Perez',
              'correo': 'juan@test.com', 'contrasena': 'clave-1'},
             format='json',
         )
@@ -189,14 +194,13 @@ class UsuariosErroresTests(BaseAPITest):
         self.assert_envelope_error(response, HTTP_404_NOT_FOUND)
 
     def test_delete_inexistente(self):
-        url = f"{reverse('Usuario_delete')}?id_usuario=9999"
-        response = self.client.delete(url)
+        response = self.client.delete(reverse('usuario-detail', args=[9999]))
 
         self.assert_envelope_error(response, HTTP_404_NOT_FOUND)
 
     def test_contrasena_no_aparece_al_crear(self):
         response = self.client.post(
-            reverse('Usuario_add'),
+            reverse('usuario-list'),
             {'nombre': 'Juan', 'apellido': 'Perez', 'correo': 'juan@test.com',
              'contrasena': self.CONTRASENA_PLANA},
             format='json',
@@ -210,17 +214,17 @@ class UsuariosErroresTests(BaseAPITest):
         usuario = self.crear_usuario(correo='juan@test.com',
                                      contrasena=self.CONTRASENA_PLANA)
 
-        response_lista = self.client.get(reverse('usuarios_list'))
+        response_lista = self.client.get(reverse('usuario-list'))
         self.assert_envelope_exitosa(response_lista)
         self.assertNotIn(self.CONTRASENA_PLANA, str(response_lista.data))
         for item in response_lista.data['datos']:
             self.assertNotIn('contrasena', item)
 
-        url = f"{reverse('Usuario_view')}?id_usuario={usuario.id_usuario}"
-        response_view = self.client.get(url)
+        response_view = self.client.get(
+            reverse('usuario-detail', args=[usuario.id_usuario]))
         self.assert_envelope_exitosa(response_view)
         self.assertNotIn(self.CONTRASENA_PLANA, str(response_view.data))
-        self.assertNotIn('contrasena', response_view.data['datos'][0])
+        self.assertNotIn('contrasena', response_view.data['datos'])
 
     def test_contrasena_almacenada_hasheada(self):
         usuario = self.crear_usuario(correo='juan@test.com',
@@ -241,7 +245,7 @@ class PrestamosErroresTests(BaseAPITest):
     def test_fecha_devolucion_anterior_a_fecha_prestamo(self):
         hoy = date.today()
         response = self.client.post(
-            reverse('Prestamo_add'),
+            reverse('prestamo-list'),
             {'id_usuario': self.usuario.id_usuario,
              'id_libro': self.libro.id_libro,
              'fecha_prestamo': hoy.isoformat(),
@@ -252,16 +256,15 @@ class PrestamosErroresTests(BaseAPITest):
         self.assert_envelope_error(response)
 
     def test_view_inexistente(self):
-        url = f"{reverse('Prestamo_view')}?id_prestamo=9999"
-        response = self.client.get(url)
+        response = self.client.get(reverse('prestamo-detail', args=[9999]))
 
         self.assert_envelope_error(response, HTTP_404_NOT_FOUND)
 
     def test_update_inexistente(self):
         hoy = date.today()
         response = self.client.put(
-            reverse('Prestamo_update'),
-            {'id_prestamo': 9999, 'id_usuario': self.usuario.id_usuario,
+            reverse('prestamo-detail', args=[9999]),
+            {'id_usuario': self.usuario.id_usuario,
              'id_libro': self.libro.id_libro,
              'fecha_prestamo': hoy.isoformat()},
             format='json',
@@ -270,14 +273,13 @@ class PrestamosErroresTests(BaseAPITest):
         self.assert_envelope_error(response, HTTP_404_NOT_FOUND)
 
     def test_delete_inexistente(self):
-        url = f"{reverse('Prestamo_delete')}?id_prestamo=9999"
-        response = self.client.delete(url)
+        response = self.client.delete(reverse('prestamo-detail', args=[9999]))
 
         self.assert_envelope_error(response, HTTP_404_NOT_FOUND)
 
     def test_crear_sin_campos_requeridos(self):
         response = self.client.post(
-            reverse('Prestamo_add'),
+            reverse('prestamo-list'),
             {'id_usuario': self.usuario.id_usuario},
             format='json',
         )
@@ -288,9 +290,8 @@ class PrestamosErroresTests(BaseAPITest):
         prestamo = self.crear_prestamo(usuario=self.usuario, libro=self.libro)
         hoy = date.today()
         response = self.client.put(
-            reverse('Prestamo_update'),
-            {'id_prestamo': prestamo.id_prestamo,
-             'id_usuario': self.usuario.id_usuario,
+            reverse('prestamo-detail', args=[prestamo.id_prestamo]),
+            {'id_usuario': self.usuario.id_usuario,
              'id_libro': self.libro.id_libro,
              'fecha_prestamo': hoy.isoformat(),
              'fecha_devolucion': (hoy - timedelta(days=2)).isoformat()},

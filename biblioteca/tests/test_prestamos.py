@@ -30,7 +30,7 @@ class PrestamosReglasStockTests(BaseAPITest):
         }
         if fecha_devolucion is not None:
             payload['fecha_devolucion'] = fecha_devolucion.isoformat()
-        return self.client.post(reverse('Prestamo_add'), payload, format='json')
+        return self.client.post(reverse('prestamo-list'), payload, format='json')
 
     def test_prestar_decrementa_stock(self):
         response = self.crear_prestamo_via_api(fecha_devolucion=self.hoy + timedelta(days=7))
@@ -63,9 +63,8 @@ class PrestamosReglasStockTests(BaseAPITest):
         self.assertEqual(self.libro.cantidad, 4)
 
         response = self.client.put(
-            reverse('Prestamo_update'),
-            {'id_prestamo': prestamo_id,
-             'id_usuario': self.usuario.id_usuario,
+            reverse('prestamo-detail', args=[prestamo_id]),
+            {'id_usuario': self.usuario.id_usuario,
              'id_libro': self.libro.id_libro,
              'fecha_prestamo': self.hoy.isoformat(),
              'fecha_devolucion': (self.hoy + timedelta(days=7)).isoformat(),
@@ -84,8 +83,8 @@ class PrestamosReglasStockTests(BaseAPITest):
         self.libro.refresh_from_db()
         self.assertEqual(self.libro.cantidad, 4)
 
-        url = f"{reverse('Prestamo_delete')}?id_prestamo={prestamo_id}"
-        response = self.client.delete(url)
+        response = self.client.delete(
+            reverse('prestamo-detail', args=[prestamo_id]))
 
         self.assert_envelope_exitosa(response)
         self.libro.refresh_from_db()
@@ -99,9 +98,8 @@ class PrestamosReglasStockTests(BaseAPITest):
 
         # Devolver: el stock vuelve a 5.
         self.client.put(
-            reverse('Prestamo_update'),
-            {'id_prestamo': prestamo_id,
-             'id_usuario': self.usuario.id_usuario,
+            reverse('prestamo-detail', args=[prestamo_id]),
+            {'id_usuario': self.usuario.id_usuario,
              'id_libro': self.libro.id_libro,
              'fecha_prestamo': self.hoy.isoformat(),
              'fecha_devolucion': (self.hoy + timedelta(days=7)).isoformat(),
@@ -112,8 +110,9 @@ class PrestamosReglasStockTests(BaseAPITest):
         self.assertEqual(self.libro.cantidad, 5)
 
         # Eliminar un préstamo ya devuelto no debe incrementar el stock otra vez.
-        url = f"{reverse('Prestamo_delete')}?id_prestamo={prestamo_id}"
-        self.assert_envelope_exitosa(self.client.delete(url))
+        response = self.client.delete(
+            reverse('prestamo-detail', args=[prestamo_id]))
+        self.assert_envelope_exitosa(response)
         self.libro.refresh_from_db()
         self.assertEqual(self.libro.cantidad, 5)
 
@@ -125,9 +124,8 @@ class PrestamosReglasStockTests(BaseAPITest):
 
         # Actualización sin cambiar el estado: el stock no debe moverse.
         response = self.client.put(
-            reverse('Prestamo_update'),
-            {'id_prestamo': prestamo_id,
-             'id_usuario': self.usuario.id_usuario,
+            reverse('prestamo-detail', args=[prestamo_id]),
+            {'id_usuario': self.usuario.id_usuario,
              'id_libro': self.libro.id_libro,
              'fecha_prestamo': (self.hoy + timedelta(days=1)).isoformat(),
              'fecha_devolucion': (self.hoy + timedelta(days=10)).isoformat(),
@@ -157,7 +155,7 @@ class PrestamosTransicionAtrasadoTests(BaseAPITest):
             estado=Prestamo.ESTADO_PRESTADO,
         )
 
-        response = self.client.get(reverse('prestamos_list'))
+        response = self.client.get(reverse('prestamo-list'))
 
         self.assert_envelope_exitosa(response)
         prestamo.refresh_from_db()
@@ -173,13 +171,13 @@ class PrestamosTransicionAtrasadoTests(BaseAPITest):
             estado=Prestamo.ESTADO_PRESTADO,
         )
 
-        url = f"{reverse('Prestamo_view')}?id_prestamo={prestamo.id_prestamo}"
-        response = self.client.get(url)
+        response = self.client.get(
+            reverse('prestamo-detail', args=[prestamo.id_prestamo]))
 
         self.assert_envelope_exitosa(response)
         prestamo.refresh_from_db()
         self.assertEqual(prestamo.estado, Prestamo.ESTADO_ATRASADO)
-        self.assertEqual(response.data['datos'][0]['estado'], Prestamo.ESTADO_ATRASADO)
+        self.assertEqual(response.data['datos']['estado'], Prestamo.ESTADO_ATRASADO)
 
     def test_prestamo_no_vencido_sigue_prestado(self):
         self.crear_prestamo(
@@ -190,7 +188,7 @@ class PrestamosTransicionAtrasadoTests(BaseAPITest):
             estado=Prestamo.ESTADO_PRESTADO,
         )
 
-        response = self.client.get(reverse('prestamos_list'))
+        response = self.client.get(reverse('prestamo-list'))
 
         self.assert_envelope_exitosa(response)
         self.assertEqual(response.data['datos'][0]['estado'], Prestamo.ESTADO_PRESTADO)
@@ -209,9 +207,8 @@ class PrestamosTransicionAtrasadoTests(BaseAPITest):
         # Se actualiza sin enviar estado (el cliente no cambia el estado):
         # la normalización al inicio de update deja el préstamo como Atrasado.
         response = self.client.put(
-            reverse('Prestamo_update'),
-            {'id_prestamo': prestamo.id_prestamo,
-             'id_usuario': self.usuario.id_usuario,
+            reverse('prestamo-detail', args=[prestamo.id_prestamo]),
+            {'id_usuario': self.usuario.id_usuario,
              'id_libro': self.libro.id_libro,
              'fecha_prestamo': (self.hoy - timedelta(days=10)).isoformat(),
              'fecha_devolucion': (self.hoy - timedelta(days=5)).isoformat()},
@@ -232,8 +229,8 @@ class PrestamosTransicionAtrasadoTests(BaseAPITest):
             estado=Prestamo.ESTADO_PRESTADO,
         )
 
-        url = f"{reverse('Prestamo_delete')}?id_prestamo={prestamo.id_prestamo}"
-        response = self.client.delete(url)
+        response = self.client.delete(
+            reverse('prestamo-detail', args=[prestamo.id_prestamo]))
 
         self.assert_envelope_exitosa(response)
         self.assertEqual(Prestamo.objects.filter(pk=prestamo.pk).count(), 0)
@@ -255,12 +252,12 @@ class PrestamosTransicionAtrasadoTests(BaseAPITest):
         self.assertEqual(self.libro.cantidad, 4)
 
         # La transición a Atrasado ocurre al consultar.
-        self.client.get(reverse('prestamos_list'))
+        self.client.get(reverse('prestamo-list'))
         prestamo.refresh_from_db()
         self.assertEqual(prestamo.estado, Prestamo.ESTADO_ATRASADO)
 
-        url = f"{reverse('Prestamo_delete')}?id_prestamo={prestamo.id_prestamo}"
-        response = self.client.delete(url)
+        response = self.client.delete(
+            reverse('prestamo-detail', args=[prestamo.id_prestamo]))
 
         self.assert_envelope_exitosa(response)
         self.libro.refresh_from_db()
