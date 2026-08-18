@@ -45,6 +45,9 @@ def Categoria_View(request):
         return Result.Error("Complete la casilla del ID de la categoria")
 
     categoria = Categoria.objects.filter(id_categoria=id)
+    if not categoria.exists():
+        return Result.Error("Registro no encontrado", 404)
+
     serialData = CategoriasSerializer(categoria, many=True)
 
     return Result.Exitosa("", serialData.data, HTTP_200_OK)
@@ -99,7 +102,7 @@ def Categoria_Update(request):
     try:
         categoria = Categoria.objects.get(id_categoria=pk)
     except Categoria.DoesNotExist:
-        return Result.Error("La categoria no existe")
+        return Result.Error("Registro no encontrado", 404)
 
     serialData = CategoriasSerializerUpdate(instance=categoria, data=request.data)
 
@@ -125,7 +128,7 @@ def Categoria_Delete(request):
     try:
         categoria = Categoria.objects.get(id_categoria=pk)
     except Categoria.DoesNotExist:
-        return Result.Error("La categoria no existe")
+        return Result.Error("Registro no encontrado", 404)
 
     try:
         categoria.delete()

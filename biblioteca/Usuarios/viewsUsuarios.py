@@ -42,6 +42,9 @@ def Usuario_View(request):
         return Result.Error("Complete la casilla del ID del usuario")
 
     usuario = Usuario.objects.filter(id_usuario=id)
+    if not usuario.exists():
+        return Result.Error("Registro no encontrado", 404)
+
     serialData = UsuarioSerializer(usuario, many=True)
 
     return Result.Exitosa("", serialData.data, HTTP_200_OK)
@@ -117,7 +120,7 @@ def Usuario_Update(request):
     try:
         usuario = Usuario.objects.get(id_usuario=pk)
     except Usuario.DoesNotExist:
-        return Result.Error("El usuario no existe")
+        return Result.Error("Registro no encontrado", 404)
 
     serialData = UsuarioSerializerUpdate(instance=usuario, data=request.data)
 
@@ -152,7 +155,7 @@ def Usuario_Delete(request):
     try:
         usuario = Usuario.objects.get(id_usuario=pk)
     except Usuario.DoesNotExist:
-        return Result.Error("El usuario no existe")
+        return Result.Error("Registro no encontrado", 404)
 
     try:
         usuario.delete()

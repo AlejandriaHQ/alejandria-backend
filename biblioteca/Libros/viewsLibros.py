@@ -42,6 +42,9 @@ def Libro_View(request):
         return Result.Error("Complete la casilla del ID del libro")
 
     libro = Libro.objects.filter(id_libro=id)
+    if not libro.exists():
+        return Result.Error("Registro no encontrado", 404)
+
     serialData = LibroSerializer(libro, many=True)
 
     return Result.Exitosa("", serialData.data, HTTP_200_OK)
@@ -110,7 +113,7 @@ def Libro_Update(request):
     try:
         libro = Libro.objects.get(id_libro=pk)
     except Libro.DoesNotExist:
-        return Result.Error("El libro no existe")
+        return Result.Error("Registro no encontrado", 404)
 
     serialData = LibroSerializerUpdate(instance=libro, data=request.data)
 
@@ -145,7 +148,7 @@ def Libro_Delete(request):
     try:
         libro = Libro.objects.get(id_libro=pk)
     except Libro.DoesNotExist:
-        return Result.Error("El libro no existe")
+        return Result.Error("Registro no encontrado", 404)
 
     try:
         libro.delete()

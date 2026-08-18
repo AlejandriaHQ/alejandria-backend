@@ -42,6 +42,9 @@ def Prestamo_View(request):
         return Result.Error("Complete la casilla del ID del prestamo")
 
     prestamo = Prestamo.objects.filter(id_prestamo=id)
+    if not prestamo.exists():
+        return Result.Error("Registro no encontrado", 404)
+
     serialData = PrestamoSerializer(prestamo, many=True)
 
     return Result.Exitosa("", serialData.data, HTTP_200_OK)
@@ -110,7 +113,7 @@ def Prestamo_Update(request):
     try:
         prestamo = Prestamo.objects.get(id_prestamo=pk)
     except Prestamo.DoesNotExist:
-        return Result.Error("El prestamo no existe")
+        return Result.Error("Registro no encontrado", 404)
 
     serialData = PrestamoSerializerUpdate(instance=prestamo, data=request.data)
 
@@ -145,7 +148,7 @@ def Prestamo_Delete(request):
     try:
         prestamo = Prestamo.objects.get(id_prestamo=pk)
     except Prestamo.DoesNotExist:
-        return Result.Error("El prestamo no existe")
+        return Result.Error("Registro no encontrado", 404)
 
     try:
         prestamo.delete()
