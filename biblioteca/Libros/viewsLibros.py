@@ -81,7 +81,9 @@ def Libro_Add(request):
         except IntegrityError:
             return Result.Error("Ya existe un registro con ese valor único", 400)
     else:
-        return Result.Error("Complete los campos vacios")
+        # Se devuelven los errores del serializer (p. ej. "Ya existe un libro
+        # con ese ISBN") en lugar del mensaje genérico y engañoso.
+        return Result.Error(serialData.errors)
 
     return Result.Exitosa("Se registro correctamente", serialData.data, HTTP_201_CREATED)
 
@@ -127,7 +129,9 @@ def Libro_Update(request):
         except IntegrityError:
             return Result.Error("Ya existe un registro con ese valor único", 400)
     else:
-        return Result.Error("Complete los campos vacios")
+        # Se devuelven los errores del serializer (p. ej. "Ya existe un libro
+        # con ese ISBN") en lugar del mensaje genérico y engañoso.
+        return Result.Error(serialData.errors)
 
     return Result.Exitosa("Se actualizo correctamente", serialData.data, HTTP_200_OK)
 

@@ -77,6 +77,9 @@ class LibrosErroresTests(BaseAPITest):
         )
 
         self.assert_envelope_error(response)
+        # El mensaje es claro (duplicado), no el genérico "Complete los campos vacios".
+        self.assertEqual(response.data['Mensaje']['isbn'][0],
+                         'Ya existe un libro con ese ISBN')
 
     def test_cantidad_cero(self):
         response = self.client.post(
@@ -146,6 +149,9 @@ class UsuariosErroresTests(BaseAPITest):
         )
 
         self.assert_envelope_error(response)
+        # El mensaje es claro (duplicado), no el genérico "Complete los campos vacios".
+        self.assertEqual(response.data['Mensaje']['correo'][0],
+                         'Ya existe un usuario con ese correo')
 
     def test_crear_sin_contrasena(self):
         response = self.client.post(
