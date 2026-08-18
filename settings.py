@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 from corsheaders.defaults import default_headers
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent
 
 # Cargar variables de entorno desde .env si existe
 load_dotenv(BASE_DIR / '.env')
@@ -98,7 +98,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'Alejandria.urls'
+ROOT_URLCONF = 'urls'
 
 TEMPLATES = [
     {
@@ -115,7 +115,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'Alejandria.wsgi.application'
+WSGI_APPLICATION = 'wsgi.application'
 
 
 # Database
