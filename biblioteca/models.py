@@ -1,4 +1,5 @@
 from django.db import models
+from django.contrib.auth.hashers import make_password, check_password
 
 
 # MODELO: Categorias
@@ -51,6 +52,17 @@ class Usuario(models.Model):
     class Meta:
         db_table = 'usuarios'
         verbose_name_plural = 'Usuarios'
+
+    def save(self, *args, **kwargs):
+        # Solo se hashea si la contraseña aún no es un hash válido de Django,
+        # así se evita re-hashear (y corromper) contraseñas ya almacenadas.
+        # Prefijos de hash reconocidos: pbkdf2_, argon2, bcrypt.
+        if not self.contrasena.startswith(('pbkdf2_', 'argon2', 'bcrypt')):
+            self.contrasena = make_password(self.contrasena)
+        super().save(*args, **kwargs)
+
+    def check_contrasena(self, raw_password):
+        return check_password(raw_password, self.contrasena)
 
     def __str__(self):
         return f"{self.nombre} {self.apellido}"
