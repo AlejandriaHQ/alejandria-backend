@@ -195,6 +195,49 @@ class PrestamosTransicionAtrasadoTests(BaseAPITest):
         self.assert_envelope_exitosa(response)
         self.assertEqual(response.data['datos'][0]['estado'], Prestamo.ESTADO_PRESTADO)
 
+    def test_transicion_a_atrasado_al_actualizar(self):
+        # Un préstamo vencido pero aún "Prestado" debe normalizarse a
+        # "Atrasado" incluso al actualizarlo (antes solo ocurría al listar/ver).
+        prestamo = self.crear_prestamo(
+            usuario=self.usuario,
+            libro=self.libro,
+            fecha_prestamo=self.hoy - timedelta(days=10),
+            fecha_devolucion=self.hoy - timedelta(days=5),
+            estado=Prestamo.ESTADO_PRESTADO,
+        )
+
+        # Se actualiza sin enviar estado (el cliente no cambia el estado):
+        # la normalización al inicio de update deja el préstamo como Atrasado.
+        response = self.client.put(
+            reverse('Prestamo_update'),
+            {'id_prestamo': prestamo.id_prestamo,
+             'id_usuario': self.usuario.id_usuario,
+             'id_libro': self.libro.id_libro,
+             'fecha_prestamo': (self.hoy - timedelta(days=10)).isoformat(),
+             'fecha_devolucion': (self.hoy - timedelta(days=5)).isoformat()},
+            format='json',
+        )
+
+        self.assert_envelope_exitosa(response)
+        prestamo.refresh_from_db()
+        self.assertEqual(prestamo.estado, Prestamo.ESTADO_ATRASADO)
+
+    def test_transicion_a_atrasado_al_eliminar(self):
+        # Al eliminar un préstamo vencido, la normalización también ocurre.
+        prestamo = self.crear_prestamo(
+            usuario=self.usuario,
+            libro=self.libro,
+            fecha_prestamo=self.hoy - timedelta(days=10),
+            fecha_devolucion=self.hoy - timedelta(days=5),
+            estado=Prestamo.ESTADO_PRESTADO,
+        )
+
+        url = f"{reverse('Prestamo_delete')}?id_prestamo={prestamo.id_prestamo}"
+        response = self.client.delete(url)
+
+        self.assert_envelope_exitosa(response)
+        self.assertEqual(Prestamo.objects.filter(pk=prestamo.pk).count(), 0)
+
     def test_eliminar_prestamo_atrasado_restaura_stock(self):
         # Un préstamo vencido (Atrasado) mantiene el ejemplar fuera del stock;
         # al eliminarlo, el stock debe restituirse.

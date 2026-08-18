@@ -117,6 +117,10 @@ def Prestamo_Add(request):
 
 @api_view(['PUT'])
 def Prestamo_Update(request):
+    # Transición automática Prestado -> Atrasado: se aplica también en update
+    # para que un préstamo vencido muestre su estado consistente tras editarse.
+    Prestamo.objects.filter(estado='Prestado', fecha_devolucion__lt=date.today()).update(estado='Atrasado')
+
     pk = request.data.get('id_prestamo')
 
     id_usuario = request.data.get('id_usuario')
@@ -184,6 +188,9 @@ pk_paramView = OpenApiParameter(
 
 @api_view(['DELETE'])
 def Prestamo_Delete(request):
+    # Transición automática Prestado -> Atrasado: se aplica también en delete
+    # para mantener el estado consistente antes de eliminar.
+    Prestamo.objects.filter(estado='Prestado', fecha_devolucion__lt=date.today()).update(estado='Atrasado')
 
     pk = request.GET.get('id_prestamo')
     if not pk:
