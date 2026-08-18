@@ -1,4 +1,4 @@
-from .serializersCategorias import CategoriasSerializer, CategoriasSerializerReg, CategoriasSerializerUpdate, CategoriasSerializerDelete
+from .serializers import CategoriasSerializer, CategoriasSerializerReg, CategoriasSerializerUpdate, CategoriasSerializerDelete
 from rest_framework.decorators import api_view
 from biblioteca.models import Categoria
 from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED

@@ -1,4 +1,4 @@
-from .serializersUsuarios import UsuarioSerializer, UsuarioSerializerReg, UsuarioSerializerUpdate, UsuarioSerializerDelete
+from .serializers import UsuarioSerializer, UsuarioSerializerReg, UsuarioSerializerUpdate, UsuarioSerializerDelete
 from rest_framework.decorators import api_view
 from biblioteca.models import Usuario
 from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED

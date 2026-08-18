@@ -37,8 +37,8 @@ urlpatterns = [
     path('redoc/', SpectacularRedocView.as_view(url_name='schema'), name='schema-redoc'),
 
     # Rutas de nuestra aplicación
-    path('biblioteca/Categorias/', include('biblioteca.Categorias.urlsCategorias')),
-    path('biblioteca/libros/', include('biblioteca.Libros.urlsLibros')),
-    path('biblioteca/usuarios/', include('biblioteca.Usuarios.urlsUsuarios')),
-    path('biblioteca/prestamos/', include('biblioteca.Prestamos.urlsPrestamos')),
+    path('biblioteca/Categorias/', include('biblioteca.categorias.urls')),
+    path('biblioteca/libros/', include('biblioteca.libros.urls')),
+    path('biblioteca/usuarios/', include('biblioteca.usuarios.urls')),
+    path('biblioteca/prestamos/', include('biblioteca.prestamos.urls')),
 ]

@@ -1,4 +1,4 @@
-from .serializersLibros import LibroSerializer, LibroSerializerReg, LibroSerializerUpdate, LibroSerializerDelete
+from .serializers import LibroSerializer, LibroSerializerReg, LibroSerializerUpdate, LibroSerializerDelete
 from rest_framework.decorators import api_view
 from biblioteca.models import Libro
 from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED
