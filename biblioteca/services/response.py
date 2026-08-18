@@ -22,7 +22,8 @@ class Result:
 
     @staticmethod
     def ErrorResponsePaginator(Mensaje, total_pages, page):
-        return Response({"success": False, "Mensaje": Mensaje, 'datos': '', 'maxPages': total_pages,
+        # 'datos' usa None para ser consistente con Result.Error (antes era '').
+        return Response({"success": False, "Mensaje": Mensaje, 'datos': None, 'maxPages': total_pages,
                          'currentpage': page,
                          'previous': False, 'next': False}, status=HTTP_400_BAD_REQUEST)
 

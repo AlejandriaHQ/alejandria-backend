@@ -132,6 +132,16 @@ class LibrosErroresTests(BaseAPITest):
 
         self.assert_envelope_error(response, HTTP_404_NOT_FOUND)
 
+    def test_pagina_fuera_de_rango(self):
+        # Un envelope de error de paginación debe ser consistente con
+        # Result.Error: 'datos' es None (no string vacío).
+        url = f"{reverse('Libro_paginator')}?page=99"
+        response = self.client.get(url)
+
+        self.assert_envelope_error(response)
+        self.assertIsNone(response.data['datos'])
+        self.assertIn('maxPages', response.data)
+
 
 class UsuariosErroresTests(BaseAPITest):
     """Errores del recurso Usuarios, incluyendo el manejo de contraseñas."""
