@@ -1,148 +1,20 @@
-from .serializers import CategoriasSerializer, CategoriasSerializerReg, CategoriasSerializerUpdate, CategoriasSerializerDelete
-from rest_framework.decorators import api_view
-from biblioteca.models import Categoria
-from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED
-from drf_spectacular.utils import extend_schema, OpenApiParameter
-from drf_spectacular.types import OpenApiTypes
-from django.db.models import Q, ProtectedError
-from django.db import IntegrityError
 from django.core.paginator import Paginator
-from ..services.response import Result, TryCatch
+from django.db import IntegrityError
+from django.db.models import Q, ProtectedError
+from rest_framework import viewsets
+from rest_framework.decorators import action
+from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema, OpenApiParameter
 
-#Categorias Views
-
-
-@extend_schema(
-    description="Obtener la lista de categorías",
-    responses={200: OpenApiTypes.OBJECT})
-
-@api_view(['GET'])
-def categorias_list(request):
-    def action_to_execute():
-        categorias = Categoria.objects.all()
-        serializer = CategoriasSerializerReg(categorias, many=True)
-        return Result.Exitosa("Lista de categorías obtenida correctamente", serializer.data)
-
-    return TryCatch(action_to_execute)
-
-
-pk_paramView = OpenApiParameter(
-    'id_categoria',
-    OpenApiTypes.INT,
-    OpenApiParameter.QUERY,
-    description="ID de la categoría",
+from ..models import Categoria
+from ..services.response import Result
+from .serializers import (
+    CategoriasSerializer,
+    CategoriasSerializerReg,
+    CategoriasSerializerUpdate,
+    CategoriasSerializerDelete,
 )
-
-
-@extend_schema(
-    description="Obtener una categoría por su ID",
-    parameters=[pk_paramView],
-    responses={200: CategoriasSerializer(many=True), 404: OpenApiTypes.OBJECT})
-
-@api_view(['GET'])
-def Categoria_View(request):
-    id = request.GET.get('id_categoria')
-    if not id:
-        return Result.Error("Complete la casilla del ID de la categoria")
-
-    categoria = Categoria.objects.filter(id_categoria=id)
-    if not categoria.exists():
-        return Result.Error("Registro no encontrado", 404)
-
-    serialData = CategoriasSerializer(categoria, many=True)
-
-    return Result.Exitosa("", serialData.data, HTTP_200_OK)
-
-
-@extend_schema(
-    description='Añade una nueva categoria.',
-    request=CategoriasSerializerReg,
-    responses={201: CategoriasSerializerReg, 400: OpenApiTypes.OBJECT})
-
-@api_view(['POST'])
-def Categoria_Add(request):
-    errores = []
-
-    nombre = request.data.get('nombre')
-    if not nombre:
-        errores.append("Complete la casilla nombre")
-
-    if errores:
-        return Result.Error(errores)
-
-    serialData = CategoriasSerializerReg(data=request.data)
-
-    if not serialData.is_valid():
-        return Result.Error("Complete los campos vacios")
-
-    try:
-        serialData.save()
-    except IntegrityError:
-        return Result.Error("Ya existe un registro con ese valor único", 400)
-
-    return Result.Exitosa("Se registro correctamente", serialData.data, HTTP_201_CREATED)
-
-
-@extend_schema(
-    description="Actualiza una categoria.",
-    request=CategoriasSerializerUpdate,
-    responses={200: CategoriasSerializerUpdate, 400: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT})
-
-@api_view(['PUT'])
-def Categoria_Update(request):
-    errores = []
-
-    pk = request.data.get('id_categoria')
-    nombre = request.data.get('nombre')
-
-    if not pk:
-        errores.append("Complete la casilla del ID de la categoria")
-    if not nombre:
-        errores.append("Complete la casilla nombre")
-
-    if errores:
-        return Result.Error(errores)
-
-    try:
-        categoria = Categoria.objects.get(id_categoria=pk)
-    except Categoria.DoesNotExist:
-        return Result.Error("Registro no encontrado", 404)
-
-    serialData = CategoriasSerializerUpdate(instance=categoria, data=request.data)
-
-    if not serialData.is_valid():
-        return Result.Error("Complete los campos vacios")
-
-    try:
-        serialData.save()
-    except IntegrityError:
-        return Result.Error("Ya existe un registro con ese valor único", 400)
-
-    return Result.Exitosa("Se actualizo correctamente", serialData.data, HTTP_200_OK)
-
-
-@extend_schema(
-    description="Eliminar un Categoria",
-    parameters=[pk_paramView],
-    responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT})
-
-@api_view(['DELETE'])
-def Categoria_Delete(request):
-    pk = request.GET.get('id_categoria')
-    if not pk:
-        return Result.Error("Complete la casilla del ID de la categoria")
-
-    try:
-        categoria = Categoria.objects.get(id_categoria=pk)
-    except Categoria.DoesNotExist:
-        return Result.Error("Registro no encontrado", 404)
-
-    try:
-        categoria.delete()
-    except ProtectedError:
-        return Result.Error("No se puede eliminar: la categoria tiene libros asociados")
-
-    return Result.Exitosa("Se elimino correctamente", {}, HTTP_200_OK)
 
 
 page_paramView = OpenApiParameter(
@@ -160,41 +32,137 @@ filter_paramView = OpenApiParameter(
 )
 
 
-@extend_schema(
-    description="Buscar",
-    parameters=[page_paramView, filter_paramView],
-    responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT})
+@extend_schema(tags=['categorias'])
+class CategoriaViewSet(viewsets.ModelViewSet):
+    queryset = Categoria.objects.all()
+    serializer_class = CategoriasSerializer
+    http_method_names = ['get', 'post', 'put', 'delete']
 
-@api_view(['GET'])
-def Categoria_Paginators(request):
-    page = request.GET.get('page')
-    pagesize = 10
-    filter = request.GET.get('filter')
+    @extend_schema(
+        description="Obtener la lista de categorías",
+        responses={200: OpenApiTypes.OBJECT})
+    def list(self, request):
+        categorias = Categoria.objects.all()
+        serializer = CategoriasSerializerReg(categorias, many=True)
+        return Result.Exitosa("Lista de categorías obtenida correctamente", serializer.data)
 
-    if filter:
-        query = Q(nombre__icontains=filter) | \
-                Q(descripcion__icontains=filter)
+    @extend_schema(
+        description='Añade una nueva categoria.',
+        request=CategoriasSerializerReg,
+        responses={201: CategoriasSerializerReg, 400: OpenApiTypes.OBJECT})
+    def create(self, request):
+        errores = []
 
-        cont = Categoria.objects.filter(query).order_by('id_categoria')
-    else:
-        cont = Categoria.objects.all().order_by('id_categoria')
+        nombre = request.data.get('nombre')
+        if not nombre:
+            errores.append("Complete la casilla nombre")
 
-    paginator = Paginator(cont, pagesize)
-    total_pages = paginator.num_pages
+        if errores:
+            return Result.Error(errores)
 
-    try:
-        page = int(page)
-    except (ValueError, TypeError):
-        page = 1
+        serialData = CategoriasSerializerReg(data=request.data)
 
-    if page > total_pages or page < 1:
-        return Result.ErrorResponsePaginator("No se encuentra esta página", total_pages, page)
+        if not serialData.is_valid():
+            return Result.Error("Complete los campos vacios")
 
-    page_obj = paginator.page(page)
+        try:
+            serialData.save()
+        except IntegrityError:
+            return Result.Error("Ya existe un registro con ese valor único", 400)
 
-    button_previous = page > 1
-    button_next = page < total_pages
+        return Result.Exitosa("Se registro correctamente", serialData.data, HTTP_201_CREATED)
 
-    serialdata = CategoriasSerializer(page_obj, many=True)
+    @extend_schema(
+        description="Obtener una categoría por su ID",
+        responses={200: CategoriasSerializer, 404: OpenApiTypes.OBJECT})
+    def retrieve(self, request, pk=None):
+        categoria = Categoria.objects.filter(pk=pk).first()
+        if not categoria:
+            return Result.Error("Registro no encontrado", 404)
 
-    return Result.ResponsePaginator('', serialdata.data, total_pages, page, button_previous, button_next)
+        serialData = CategoriasSerializer(categoria)
+        return Result.Exitosa("", serialData.data, HTTP_200_OK)
+
+    @extend_schema(
+        description="Actualiza una categoria.",
+        request=CategoriasSerializerUpdate,
+        responses={200: CategoriasSerializerUpdate, 400: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT})
+    def update(self, request, pk=None):
+        errores = []
+
+        nombre = request.data.get('nombre')
+
+        if not nombre:
+            errores.append("Complete la casilla nombre")
+
+        if errores:
+            return Result.Error(errores)
+
+        categoria = Categoria.objects.filter(pk=pk).first()
+        if not categoria:
+            return Result.Error("Registro no encontrado", 404)
+
+        serialData = CategoriasSerializerUpdate(instance=categoria, data=request.data)
+
+        if not serialData.is_valid():
+            return Result.Error("Complete los campos vacios")
+
+        try:
+            serialData.save()
+        except IntegrityError:
+            return Result.Error("Ya existe un registro con ese valor único", 400)
+
+        return Result.Exitosa("Se actualizo correctamente", serialData.data, HTTP_200_OK)
+
+    @extend_schema(
+        description="Eliminar un Categoria",
+        responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT})
+    def destroy(self, request, pk=None):
+        categoria = Categoria.objects.filter(pk=pk).first()
+        if not categoria:
+            return Result.Error("Registro no encontrado", 404)
+
+        try:
+            categoria.delete()
+        except ProtectedError:
+            return Result.Error("No se puede eliminar: la categoria tiene libros asociados")
+
+        return Result.Exitosa("Se elimino correctamente", {}, HTTP_200_OK)
+
+    @extend_schema(
+        description="Buscar",
+        parameters=[page_paramView, filter_paramView],
+        responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT})
+    @action(detail=False, methods=['get'], url_path='paginar')
+    def paginar(self, request):
+        page = request.GET.get('page')
+        pagesize = 10
+        filter = request.GET.get('filter')
+
+        if filter:
+            query = Q(nombre__icontains=filter) | \
+                    Q(descripcion__icontains=filter)
+
+            cont = Categoria.objects.filter(query).order_by('id_categoria')
+        else:
+            cont = Categoria.objects.all().order_by('id_categoria')
+
+        paginator = Paginator(cont, pagesize)
+        total_pages = paginator.num_pages
+
+        try:
+            page = int(page)
+        except (ValueError, TypeError):
+            page = 1
+
+        if page > total_pages or page < 1:
+            return Result.ErrorResponsePaginator("No se encuentra esta página", total_pages, page)
+
+        page_obj = paginator.page(page)
+
+        button_previous = page > 1
+        button_next = page < total_pages
+
+        serialdata = CategoriasSerializer(page_obj, many=True)
+
+        return Result.ResponsePaginator('', serialdata.data, total_pages, page, button_previous, button_next)

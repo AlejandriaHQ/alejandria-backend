@@ -18,7 +18,7 @@ def inicio(request):
                 "schema": "/swagger/schema/",
             },
             "endpoints": {
-                "categorias": "/biblioteca/Categorias/",
+                "categorias": "/biblioteca/categorias/",
                 "libros": "/biblioteca/libros/",
                 "usuarios": "/biblioteca/usuarios/",
                 "prestamos": "/biblioteca/prestamos/",
@@ -37,8 +37,8 @@ urlpatterns = [
     path('redoc/', SpectacularRedocView.as_view(url_name='schema'), name='schema-redoc'),
 
     # Rutas de nuestra aplicación
-    path('biblioteca/Categorias/', include('biblioteca.categorias.urls')),
-    path('biblioteca/libros/', include('biblioteca.libros.urls')),
-    path('biblioteca/usuarios/', include('biblioteca.usuarios.urls')),
-    path('biblioteca/prestamos/', include('biblioteca.prestamos.urls')),
+    path('biblioteca/', include('biblioteca.categorias.urls')),
+    path('biblioteca/', include('biblioteca.libros.urls')),
+    path('biblioteca/', include('biblioteca.usuarios.urls')),
+    path('biblioteca/', include('biblioteca.prestamos.urls')),
 ]
