@@ -5,6 +5,7 @@ from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
 from django.db.models import Q, ProtectedError
+from django.db import IntegrityError
 from django.core.paginator import Paginator
 from ..services.response import Result, TryCatch
 
@@ -74,7 +75,10 @@ def Categoria_Add(request):
     if not serialData.is_valid():
         return Result.Error("Complete los campos vacios")
 
-    serialData.save()
+    try:
+        serialData.save()
+    except IntegrityError:
+        return Result.Error("Ya existe un registro con ese valor único", 400)
 
     return Result.Exitosa("Se registro correctamente", serialData.data, HTTP_201_CREATED)
 
@@ -109,7 +113,10 @@ def Categoria_Update(request):
     if not serialData.is_valid():
         return Result.Error("Complete los campos vacios")
 
-    serialData.save()
+    try:
+        serialData.save()
+    except IntegrityError:
+        return Result.Error("Ya existe un registro con ese valor único", 400)
 
     return Result.Exitosa("Se actualizo correctamente", serialData.data, HTTP_200_OK)
 

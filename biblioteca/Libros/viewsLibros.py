@@ -5,6 +5,7 @@ from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
 from django.db.models import Q, ProtectedError
+from django.db import IntegrityError
 from django.core.paginator import Paginator
 from ..services.response import Result, TryCatch
 
@@ -75,7 +76,10 @@ def Libro_Add(request):
     serialData = LibroSerializerReg(data=request.data)
 
     if serialData.is_valid():
-        serialData.save()
+        try:
+            serialData.save()
+        except IntegrityError:
+            return Result.Error("Ya existe un registro con ese valor único", 400)
     else:
         return Result.Error("Complete los campos vacios")
 
@@ -118,7 +122,10 @@ def Libro_Update(request):
     serialData = LibroSerializerUpdate(instance=libro, data=request.data)
 
     if serialData.is_valid():
-        serialData.save()
+        try:
+            serialData.save()
+        except IntegrityError:
+            return Result.Error("Ya existe un registro con ese valor único", 400)
     else:
         return Result.Error("Complete los campos vacios")
 
