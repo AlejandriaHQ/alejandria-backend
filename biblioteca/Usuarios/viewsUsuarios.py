@@ -1,7 +1,6 @@
 from .serializersUsuarios import UsuarioSerializer, UsuarioSerializerReg, UsuarioSerializerUpdate, UsuarioSerializerDelete
 from rest_framework.decorators import api_view
 from biblioteca.models import Usuario
-from rest_framework.response import Response
 from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
@@ -14,14 +13,14 @@ from ..services.response import Result, TryCatch
 
 @extend_schema(
     description="Obtener la lista de usuarios",
-    responses={200: UsuarioSerializerReg(many=True)})
+    responses={200: OpenApiTypes.OBJECT})
 
 @api_view(['GET'])
 def usuarios_list(request):
     def action_to_execute():
         usuarios = Usuario.objects.all()
         serializer = UsuarioSerializerReg(usuarios, many=True)
-        return Response(serializer.data, status=HTTP_200_OK)
+        return Result.Exitosa("Lista de usuarios obtenida correctamente", serializer.data)
 
     return TryCatch(action_to_execute)
 

@@ -1,7 +1,6 @@
 from .serializersLibros import LibroSerializer, LibroSerializerReg, LibroSerializerUpdate, LibroSerializerDelete
 from rest_framework.decorators import api_view
 from biblioteca.models import Libro
-from rest_framework.response import Response
 from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
@@ -14,14 +13,14 @@ from ..services.response import Result, TryCatch
 
 @extend_schema(
     description="Obtener la lista de libros",
-    responses={200: LibroSerializerReg(many=True)})
+    responses={200: OpenApiTypes.OBJECT})
 
 @api_view(['GET'])
 def libros_list(request):
     def action_to_execute():
         libros = Libro.objects.all()
         serializer = LibroSerializerReg(libros, many=True)
-        return Response(serializer.data, status=HTTP_200_OK)
+        return Result.Exitosa("Lista de libros obtenida correctamente", serializer.data)
 
     return TryCatch(action_to_execute)
 

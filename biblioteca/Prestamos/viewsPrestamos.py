@@ -1,7 +1,6 @@
 from .serializersPrestamos import PrestamoSerializer, PrestamoSerializerReg, PrestamoSerializerUpdate, PrestamoSerializerDelete
 from rest_framework.decorators import api_view
 from biblioteca.models import Prestamo
-from rest_framework.response import Response
 from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
@@ -14,14 +13,14 @@ from ..services.response import Result, TryCatch
 
 @extend_schema(
     description="Obtener la lista de préstamos",
-    responses={200: PrestamoSerializerReg(many=True)})
+    responses={200: OpenApiTypes.OBJECT})
 
 @api_view(['GET'])
 def prestamos_list(request):
     def action_to_execute():
         prestamos = Prestamo.objects.all()
         serializer = PrestamoSerializerReg(prestamos, many=True)
-        return Response(serializer.data, status=HTTP_200_OK)
+        return Result.Exitosa("Lista de préstamos obtenida correctamente", serializer.data)
 
     return TryCatch(action_to_execute)
 
