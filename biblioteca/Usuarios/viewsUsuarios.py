@@ -221,15 +221,8 @@ def Usuario_Paginators(request):
 
     page_obj = paginator.page(page)
 
-    if page == total_pages:
-        button_previous = True
-        button_next = False
-    elif page <= 1:
-        button_previous = False
-        button_next = True
-    else:
-        button_previous = True
-        button_next = True
+    button_previous = page > 1
+    button_next = page < total_pages
 
     serialdata = UsuarioSerializer(page_obj, many=True)
 
