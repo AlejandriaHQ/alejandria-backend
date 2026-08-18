@@ -1,3 +1,4 @@
+from datetime import date
 from django.db import models
 from django.contrib.auth.hashers import make_password, check_password
 from django.core.validators import MinValueValidator
@@ -106,6 +107,15 @@ class Prestamo(models.Model):
     class Meta:
         db_table = 'prestamos'
         verbose_name_plural = 'Préstamos'
+
+    def marcar_atrasado_si_aplica(self):
+        # Transición automática Prestado -> Atrasado cuando la fecha de
+        # devolución ya venció. NO afecta el stock: solo Prestado -> Devuelto
+        # devuelve ejemplares; un préstamo Atrasado mantiene el ejemplar fuera
+        # del stock hasta que sea devuelto.
+        if self.estado == self.ESTADO_PRESTADO and self.fecha_devolucion and self.fecha_devolucion < date.today():
+            self.estado = self.ESTADO_ATRASADO
+            self.save(update_fields=['estado'])
 
     def __str__(self):
         return f"Préstamo #{self.id_prestamo} - {self.id_usuario} - {self.id_libro}"

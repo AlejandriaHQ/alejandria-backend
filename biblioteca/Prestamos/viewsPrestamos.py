@@ -7,6 +7,7 @@ from drf_spectacular.types import OpenApiTypes
 from django.db.models import Q, ProtectedError, F
 from django.db import IntegrityError, transaction
 from django.core.paginator import Paginator
+from datetime import date
 from ..services.response import Result, TryCatch
 
 #Prestamos Views
@@ -19,6 +20,9 @@ from ..services.response import Result, TryCatch
 @api_view(['GET'])
 def prestamos_list(request):
     def action_to_execute():
+        # Transición automática Prestado -> Atrasado: se actualiza en masa antes
+        # de devolver los datos (update_atrasados), sin afectar el stock.
+        Prestamo.objects.filter(estado='Prestado', fecha_devolucion__lt=date.today()).update(estado='Atrasado')
         prestamos = Prestamo.objects.all()
         serializer = PrestamoSerializerReg(prestamos, many=True)
         return Result.Exitosa("Lista de préstamos obtenida correctamente", serializer.data)
@@ -41,6 +45,9 @@ def Prestamo_View(request):
     id = request.GET.get('id_prestamo')
     if not id:
         return Result.Error("Complete la casilla del ID del prestamo")
+
+    # Transición automática Prestado -> Atrasado sobre préstamos vencidos
+    Prestamo.objects.filter(estado='Prestado', fecha_devolucion__lt=date.today()).update(estado='Atrasado')
 
     prestamo = Prestamo.objects.filter(id_prestamo=id)
     if not prestamo.exists():
@@ -223,6 +230,9 @@ def Prestamo_Paginators(request):
     page = request.GET.get('page')
     pagesize = 10
     filter = request.GET.get('filter')
+
+    # Transición automática Prestado -> Atrasado sobre préstamos vencidos
+    Prestamo.objects.filter(estado='Prestado', fecha_devolucion__lt=date.today()).update(estado='Atrasado')
 
     if filter:
         query = Q(estado__icontains=filter)
