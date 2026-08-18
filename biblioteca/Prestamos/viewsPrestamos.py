@@ -1,11 +1,11 @@
 from .serializersPrestamos import PrestamoSerializer, PrestamoSerializerReg, PrestamoSerializerUpdate, PrestamoSerializerDelete
 from rest_framework.decorators import api_view
-from biblioteca.models import Prestamo
+from biblioteca.models import Prestamo, Libro
 from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
-from django.db.models import Q, ProtectedError
-from django.db import IntegrityError
+from django.db.models import Q, ProtectedError, F
+from django.db import IntegrityError, transaction
 from django.core.paginator import Paginator
 from ..services.response import Result, TryCatch
 
@@ -77,7 +77,22 @@ def Prestamo_Add(request):
 
     if serialData.is_valid():
         try:
-            serialData.save()
+            # Regla de stock: se valida disponibilidad y se decrementa el stock
+            # de forma atómica dentro de una transacción (select_for_update bloquea
+            # la fila del libro para evitar condiciones de carrera concurrentes).
+            with transaction.atomic():
+                try:
+                    libro = Libro.objects.select_for_update().get(pk=id_libro)
+                except Libro.DoesNotExist:
+                    return Result.Error("Libro no encontrado", 404)
+
+                if libro.cantidad < 1:
+                    return Result.Error("No hay ejemplares disponibles de este libro", 400)
+
+                serialData.save()
+                # Decremento atómico del stock al prestar (nunca baja de 0 porque
+                # ya se validó cantidad >= 1 dentro de la misma transacción).
+                Libro.objects.filter(pk=id_libro).update(cantidad=F('cantidad') - 1)
         except IntegrityError:
             return Result.Error("Ya existe un registro con ese valor único", 400)
     else:
@@ -119,11 +134,24 @@ def Prestamo_Update(request):
     except Prestamo.DoesNotExist:
         return Result.Error("Registro no encontrado", 404)
 
+    # Estado previo para decidir el ajuste de stock tras la actualización
+    estado_anterior = prestamo.estado
+
     serialData = PrestamoSerializerUpdate(instance=prestamo, data=request.data)
 
     if serialData.is_valid():
         try:
-            serialData.save()
+            with transaction.atomic():
+                serialData.save()
+                # Regla de stock según el cambio de estado:
+                #  - Pasa a Devuelto (antes no lo era): el ejemplar vuelve al stock.
+                #  - Deja de estar Devuelto: el ejemplar vuelve a estar prestado,
+                #    se decrementa (con guard para no bajar de 0).
+                nuevo_estado = prestamo.estado  # tras save() el instance ya refleja el nuevo valor
+                if estado_anterior != 'Devuelto' and nuevo_estado == 'Devuelto':
+                    Libro.objects.filter(pk=prestamo.id_libro_id).update(cantidad=F('cantidad') + 1)
+                elif estado_anterior == 'Devuelto' and nuevo_estado != 'Devuelto':
+                    Libro.objects.filter(pk=prestamo.id_libro_id, cantidad__gt=0).update(cantidad=F('cantidad') - 1)
         except IntegrityError:
             return Result.Error("Ya existe un registro con ese valor único", 400)
     else:
@@ -156,6 +184,11 @@ def Prestamo_Delete(request):
         prestamo = Prestamo.objects.get(id_prestamo=pk)
     except Prestamo.DoesNotExist:
         return Result.Error("Registro no encontrado", 404)
+
+    # Regla de stock: si el préstamo aún no estaba devuelto (Prestado/Atrasado),
+    # el ejemplar estaba fuera del stock, por lo que al eliminar se devuelve.
+    if prestamo.estado != 'Devuelto':
+        Libro.objects.filter(pk=prestamo.id_libro_id).update(cantidad=F('cantidad') + 1)
 
     try:
         prestamo.delete()
