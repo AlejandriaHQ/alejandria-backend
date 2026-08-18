@@ -103,7 +103,6 @@ def Usuario_Update(request):
     nombre = request.data.get('nombre')
     apellido = request.data.get('apellido')
     correo = request.data.get('correo')
-    contrasena = request.data.get('contrasena')
 
     errores = []
     if not pk:
@@ -116,9 +115,6 @@ def Usuario_Update(request):
 
     if not correo:
         errores.append("Complete la casilla correo")
-
-    if not contrasena:
-        errores.append("Complete la casilla contrasena")
 
     if errores:
         return Result.Error(errores)

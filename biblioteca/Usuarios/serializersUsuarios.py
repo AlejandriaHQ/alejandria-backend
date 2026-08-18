@@ -41,9 +41,10 @@ class UsuarioSerializerUpdate(serializers.ModelSerializer):
     class Meta:
         model = Usuario
         fields = ['nombre', 'apellido', 'correo', 'telefono', 'contrasena']
-        # contrasena write_only: se acepta al actualizar pero no se devuelve en la respuesta
+        # contrasena write_only y opcional: permite actualizar nombre/correo/
+        # telefono sin reenviar la contraseña. Si se envía, el modelo la hashea.
         extra_kwargs = {
-            'contrasena': {'write_only': True},
+            'contrasena': {'write_only': True, 'required': False},
         }
 
     def validate_correo(self, value):
@@ -55,6 +56,14 @@ class UsuarioSerializerUpdate(serializers.ModelSerializer):
         if qs.exists():
             raise serializers.ValidationError("Ya existe un usuario con ese correo")
         return value
+
+    def update(self, instance, validated_data):
+        # Si no se envió nueva contraseña, se quita de validated_data para no
+        # pisar el hash existente. Si vino, se deja para que el modelo la
+        # hashee en save().
+        if 'contrasena' not in validated_data:
+            validated_data.pop('contrasena', None)
+        return super().update(instance, validated_data)
 
 
 class UsuarioSerializerDelete(serializers.ModelSerializer):

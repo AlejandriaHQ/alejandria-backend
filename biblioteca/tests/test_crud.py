@@ -287,6 +287,26 @@ class UsuariosCRUDTests(BaseAPITest):
         self.assertEqual(usuario.telefono, '555-9999')
         self.assertTrue(usuario.check_contrasena('nueva-clave-1'))
 
+    def test_actualizar_usuario_sin_contrasena_conserva_clave(self):
+        usuario = self.crear_usuario(nombre='Juan', apellido='Perez',
+                                     correo='juan@test.com',
+                                     contrasena='clave-original')
+
+        response = self.client.put(
+            reverse('Usuario_update'),
+            {'id_usuario': usuario.id_usuario, 'nombre': 'Juan Carlos',
+             'apellido': 'Perez', 'correo': 'juan@test.com',
+             'telefono': '555-0000'},  # sin contrasena
+            format='json',
+        )
+
+        self.assert_envelope_exitosa(response)
+        usuario.refresh_from_db()
+        self.assertEqual(usuario.nombre, 'Juan Carlos')
+        self.assertEqual(usuario.telefono, '555-0000')
+        # La contraseña antigua sigue siendo válida: no se pisó el hash.
+        self.assertTrue(usuario.check_contrasena('clave-original'))
+
     def test_eliminar_usuario(self):
         usuario = self.crear_usuario(correo='juan@test.com')
 
