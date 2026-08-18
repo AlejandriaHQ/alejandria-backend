@@ -3,14 +3,18 @@ from rest_framework.decorators import api_view
 from biblioteca.models import Prestamo
 from rest_framework.response import Response
 from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED
-from drf_yasg.utils import swagger_auto_schema
-from drf_yasg import openapi
+from drf_spectacular.utils import extend_schema, OpenApiParameter
+from drf_spectacular.types import OpenApiTypes
 from django.db.models import Q, ProtectedError
 from django.core.paginator import Paginator
 from ..services.response import Result, TryCatch
 
 #Prestamos Views
 
+
+@extend_schema(
+    description="Obtener la lista de préstamos",
+    responses={200: PrestamoSerializerReg(many=True)})
 
 @api_view(['GET'])
 def prestamos_list(request):
@@ -22,14 +26,15 @@ def prestamos_list(request):
     return TryCatch(action_to_execute)
 
 
-pk_paramView = openapi.Parameter(
-    'id_prestamo', openapi.IN_QUERY,
-    description="ID del prestamo",
-    type=openapi.TYPE_INTEGER)
+pk_paramView = OpenApiParameter(
+    'id_prestamo', OpenApiTypes.INT, OpenApiParameter.QUERY,
+    description="ID del prestamo")
 
 
-@swagger_auto_schema(
-    method='get', operation_description="Obtener un prestamo por su ID", manual_parameters=[pk_paramView], responses={200: 'Exitoso', 400: 'Error'})
+@extend_schema(
+    description="Obtener un prestamo por su ID",
+    parameters=[pk_paramView],
+    responses={200: PrestamoSerializer(many=True), 404: OpenApiTypes.OBJECT})
 
 @api_view(['GET'])
 def Prestamo_View(request):
@@ -43,11 +48,10 @@ def Prestamo_View(request):
     return Result.Exitosa("", serialData.data, HTTP_200_OK)
 
 
-@swagger_auto_schema(
-    method='post',
-    operation_description='Añade un nuevo prestamo.',
-    request_body=PrestamoSerializerReg,
-    responses={200: 'Exitoso', 400: 'Error'})
+@extend_schema(
+    description='Añade un nuevo prestamo.',
+    request=PrestamoSerializerReg,
+    responses={201: PrestamoSerializerReg, 400: OpenApiTypes.OBJECT})
 
 @api_view(['POST'])
 def Prestamo_Add(request):
@@ -76,11 +80,10 @@ def Prestamo_Add(request):
     return Result.Exitosa("Se registro correctamente", serialData.data, HTTP_201_CREATED)
 
 
-@swagger_auto_schema(
-    method='put',
-    operation_description="Actualiza un prestamo.",
-    request_body=PrestamoSerializerUpdate,
-    responses={200: 'Exitoso', 400: 'Error'})
+@extend_schema(
+    description="Actualiza un prestamo.",
+    request=PrestamoSerializerUpdate,
+    responses={200: PrestamoSerializerUpdate, 400: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT})
 
 @api_view(['PUT'])
 def Prestamo_Update(request):
@@ -120,19 +123,18 @@ def Prestamo_Update(request):
     return Result.Exitosa("Se actualizo correctamente", serialData.data, HTTP_200_OK)
 
 
-pk_paramView = openapi.Parameter(
+pk_paramView = OpenApiParameter(
     'id_prestamo',
-    openapi.IN_QUERY,
+    OpenApiTypes.INT,
+    OpenApiParameter.QUERY,
     description="ID del prestamo",
-    type=openapi.TYPE_INTEGER,
 )
 
 
-@swagger_auto_schema(
-    method='delete',
-    operation_description="Eliminar un prestamo",
-    manual_parameters=[pk_paramView],
-    responses={200: 'Exitoso', 400: 'Error'})
+@extend_schema(
+    description="Eliminar un prestamo",
+    parameters=[pk_paramView],
+    responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT})
 
 @api_view(['DELETE'])
 def Prestamo_Delete(request):
@@ -154,26 +156,25 @@ def Prestamo_Delete(request):
     return Result.Exitosa("Se elimino correctamente", {}, HTTP_200_OK)
 
 
-page_paramView = openapi.Parameter(
+page_paramView = OpenApiParameter(
     'page',
-    openapi.IN_QUERY,
+    OpenApiTypes.INT,
+    OpenApiParameter.QUERY,
     description="Page",
-    type=openapi.TYPE_INTEGER,
 )
 
-filter_paramView = openapi.Parameter(
+filter_paramView = OpenApiParameter(
     'filter',
-    openapi.IN_QUERY,
+    OpenApiTypes.STR,
+    OpenApiParameter.QUERY,
     description="Filter",
-    type=openapi.TYPE_STRING,
 )
 
 
-@swagger_auto_schema(
-    method='get',
-    operation_description="Buscar",
-    manual_parameters=[page_paramView, filter_paramView],
-    responses={200: 'Exitoso', 400: 'Error'})
+@extend_schema(
+    description="Buscar",
+    parameters=[page_paramView, filter_paramView],
+    responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT})
 
 @api_view(['GET'])
 def Prestamo_Paginators(request):

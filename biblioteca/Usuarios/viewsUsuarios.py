@@ -3,14 +3,18 @@ from rest_framework.decorators import api_view
 from biblioteca.models import Usuario
 from rest_framework.response import Response
 from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED
-from drf_yasg.utils import swagger_auto_schema
-from drf_yasg import openapi
+from drf_spectacular.utils import extend_schema, OpenApiParameter
+from drf_spectacular.types import OpenApiTypes
 from django.db.models import Q, ProtectedError
 from django.core.paginator import Paginator
 from ..services.response import Result, TryCatch
 
 #Usuarios Views
 
+
+@extend_schema(
+    description="Obtener la lista de usuarios",
+    responses={200: UsuarioSerializerReg(many=True)})
 
 @api_view(['GET'])
 def usuarios_list(request):
@@ -22,14 +26,15 @@ def usuarios_list(request):
     return TryCatch(action_to_execute)
 
 
-pk_paramView = openapi.Parameter(
-    'id_usuario', openapi.IN_QUERY,
-    description="ID del usuario",
-    type=openapi.TYPE_INTEGER)
+pk_paramView = OpenApiParameter(
+    'id_usuario', OpenApiTypes.INT, OpenApiParameter.QUERY,
+    description="ID del usuario")
 
 
-@swagger_auto_schema(
-    method='get', operation_description="Obtener un usuario por su ID", manual_parameters=[pk_paramView], responses={200: 'Exitoso', 400: 'Error'})
+@extend_schema(
+    description="Obtener un usuario por su ID",
+    parameters=[pk_paramView],
+    responses={200: UsuarioSerializer(many=True), 404: OpenApiTypes.OBJECT})
 
 @api_view(['GET'])
 def Usuario_View(request):
@@ -43,11 +48,10 @@ def Usuario_View(request):
     return Result.Exitosa("", serialData.data, HTTP_200_OK)
 
 
-@swagger_auto_schema(
-    method='post',
-    operation_description='Añade un nuevo usuario.',
-    request_body=UsuarioSerializerReg,
-    responses={200: 'Exitoso', 400: 'Error'})
+@extend_schema(
+    description='Añade un nuevo usuario.',
+    request=UsuarioSerializerReg,
+    responses={201: UsuarioSerializerReg, 400: OpenApiTypes.OBJECT})
 
 @api_view(['POST'])
 def Usuario_Add(request):
@@ -79,11 +83,10 @@ def Usuario_Add(request):
     return Result.Exitosa("Se registro correctamente", serialData.data, HTTP_201_CREATED)
 
 
-@swagger_auto_schema(
-    method='put',
-    operation_description="Actualiza un usuario.",
-    request_body=UsuarioSerializerUpdate,
-    responses={200: 'Exitoso', 400: 'Error'})
+@extend_schema(
+    description="Actualiza un usuario.",
+    request=UsuarioSerializerUpdate,
+    responses={200: UsuarioSerializerUpdate, 400: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT})
 
 @api_view(['PUT'])
 def Usuario_Update(request):
@@ -127,19 +130,18 @@ def Usuario_Update(request):
     return Result.Exitosa("Se actualizo correctamente", serialData.data, HTTP_200_OK)
 
 
-pk_paramView = openapi.Parameter(
+pk_paramView = OpenApiParameter(
     'id_usuario',
-    openapi.IN_QUERY,
+    OpenApiTypes.INT,
+    OpenApiParameter.QUERY,
     description="ID del usuario",
-    type=openapi.TYPE_INTEGER,
 )
 
 
-@swagger_auto_schema(
-    method='delete',
-    operation_description="Eliminar un usuario",
-    manual_parameters=[pk_paramView],
-    responses={200: 'Exitoso', 400: 'Error'})
+@extend_schema(
+    description="Eliminar un usuario",
+    parameters=[pk_paramView],
+    responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT})
 
 @api_view(['DELETE'])
 def Usuario_Delete(request):
@@ -161,26 +163,25 @@ def Usuario_Delete(request):
     return Result.Exitosa("Se elimino correctamente", {}, HTTP_200_OK)
 
 
-page_paramView = openapi.Parameter(
+page_paramView = OpenApiParameter(
     'page',
-    openapi.IN_QUERY,
+    OpenApiTypes.INT,
+    OpenApiParameter.QUERY,
     description="Page",
-    type=openapi.TYPE_INTEGER,
 )
 
-filter_paramView = openapi.Parameter(
+filter_paramView = OpenApiParameter(
     'filter',
-    openapi.IN_QUERY,
+    OpenApiTypes.STR,
+    OpenApiParameter.QUERY,
     description="Filter",
-    type=openapi.TYPE_STRING,
 )
 
 
-@swagger_auto_schema(
-    method='get',
-    operation_description="Buscar",
-    manual_parameters=[page_paramView, filter_paramView],
-    responses={200: 'Exitoso', 400: 'Error'})
+@extend_schema(
+    description="Buscar",
+    parameters=[page_paramView, filter_paramView],
+    responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT})
 
 @api_view(['GET'])
 def Usuario_Paginators(request):

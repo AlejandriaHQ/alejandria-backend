@@ -59,11 +59,24 @@ INSTALLED_APPS = [
 # Third party apps
     'corsheaders',
     'rest_framework',
-    'drf_yasg',
+    'drf_spectacular',
 
     #LA app 
     'biblioteca',
 ]
+
+# Configuración de drf-spectacular (generación del esquema OpenAPI)
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Alejandría API',
+    'DESCRIPTION': 'API de gestión de la biblioteca Alejandría.',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+}
+
+# Configuración de Django REST Framework
+REST_FRAMEWORK = {
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',

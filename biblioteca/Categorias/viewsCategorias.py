@@ -3,14 +3,18 @@ from rest_framework.decorators import api_view
 from biblioteca.models import Categoria
 from rest_framework.response import Response
 from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED
-from drf_yasg.utils import swagger_auto_schema
-from drf_yasg import openapi
+from drf_spectacular.utils import extend_schema, OpenApiParameter
+from drf_spectacular.types import OpenApiTypes
 from django.db.models import Q, ProtectedError
 from django.core.paginator import Paginator
 from ..services.response import Result, TryCatch
 
 #Categorias Views
 
+
+@extend_schema(
+    description="Obtener la lista de categorías",
+    responses={200: CategoriasSerializerReg(many=True)})
 
 @api_view(['GET'])
 def categorias_list(request):
@@ -22,19 +26,18 @@ def categorias_list(request):
     return TryCatch(action_to_execute)
 
 
-pk_paramView = openapi.Parameter(
+pk_paramView = OpenApiParameter(
     'id_categoria',
-    openapi.IN_QUERY,
+    OpenApiTypes.INT,
+    OpenApiParameter.QUERY,
     description="ID de la categoría",
-    type=openapi.TYPE_INTEGER,
 )
 
 
-@swagger_auto_schema(
-    method='get',
-    operation_description="Obtener una categoría por su ID",
-    manual_parameters=[pk_paramView],
-    responses={200: 'Exitoso', 400: 'Error'})
+@extend_schema(
+    description="Obtener una categoría por su ID",
+    parameters=[pk_paramView],
+    responses={200: CategoriasSerializer(many=True), 404: OpenApiTypes.OBJECT})
 
 @api_view(['GET'])
 def Categoria_View(request):
@@ -48,11 +51,10 @@ def Categoria_View(request):
     return Result.Exitosa("", serialData.data, HTTP_200_OK)
 
 
-@swagger_auto_schema(
-    method='post',
-    operation_description='Añade una nueva categoria.',
-    request_body=CategoriasSerializerReg,
-    responses={200: 'Exitoso', 400: 'Error'})
+@extend_schema(
+    description='Añade una nueva categoria.',
+    request=CategoriasSerializerReg,
+    responses={201: CategoriasSerializerReg, 400: OpenApiTypes.OBJECT})
 
 @api_view(['POST'])
 def Categoria_Add(request):
@@ -75,11 +77,10 @@ def Categoria_Add(request):
     return Result.Exitosa("Se registro correctamente", serialData.data, HTTP_201_CREATED)
 
 
-@swagger_auto_schema(
-    method='put',
-    operation_description="Actualiza una categoria.",
-    request_body=CategoriasSerializerUpdate,
-    responses={200: 'Exitoso', 400: 'Error'})
+@extend_schema(
+    description="Actualiza una categoria.",
+    request=CategoriasSerializerUpdate,
+    responses={200: CategoriasSerializerUpdate, 400: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT})
 
 @api_view(['PUT'])
 def Categoria_Update(request):
@@ -111,11 +112,10 @@ def Categoria_Update(request):
     return Result.Exitosa("Se actualizo correctamente", serialData.data, HTTP_200_OK)
 
 
-@swagger_auto_schema(
-    method='delete',
-    operation_description="Eliminar un Categoria",
-    manual_parameters=[pk_paramView],
-    responses={200: 'Exitoso', 400: 'Error'})
+@extend_schema(
+    description="Eliminar un Categoria",
+    parameters=[pk_paramView],
+    responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT})
 
 @api_view(['DELETE'])
 def Categoria_Delete(request):
@@ -136,26 +136,25 @@ def Categoria_Delete(request):
     return Result.Exitosa("Se elimino correctamente", {}, HTTP_200_OK)
 
 
-page_paramView = openapi.Parameter(
+page_paramView = OpenApiParameter(
     'page',
-    openapi.IN_QUERY,
+    OpenApiTypes.INT,
+    OpenApiParameter.QUERY,
     description="Page",
-    type=openapi.TYPE_INTEGER,
 )
 
-filter_paramView = openapi.Parameter(
+filter_paramView = OpenApiParameter(
     'filter',
-    openapi.IN_QUERY,
+    OpenApiTypes.STR,
+    OpenApiParameter.QUERY,
     description="Filter",
-    type=openapi.TYPE_STRING,
 )
 
 
-@swagger_auto_schema(
-    method='get',
-    operation_description="Buscar",
-    manual_parameters=[page_paramView, filter_paramView],
-    responses={200: 'Exitoso', 400: 'Error'})
+@extend_schema(
+    description="Buscar",
+    parameters=[page_paramView, filter_paramView],
+    responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT})
 
 @api_view(['GET'])
 def Categoria_Paginators(request):
