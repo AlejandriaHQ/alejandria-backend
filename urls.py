@@ -29,6 +29,10 @@ def inicio(request):
 
 # 1. Rutas Globales
 urlpatterns = [
+    # F15 pentest: / expone el mapa de endpoints. Con JWT activo (IsAuthenticated
+    # global en settings) el acceso anónimo responde 401, por lo que el mapa solo
+    # es visible para clientes autenticados. Decisión: se MANTIENE — es útil para
+    # desarrolladores y ya no filtra información a clientes no autenticados.
     path('', inicio, name='inicio'),
     # /admin/ (F08 pentest): el Django admin nativo NO tiene protección contra
     # fuerza bruta por defecto. En producción debe restringirse por red/IP o
