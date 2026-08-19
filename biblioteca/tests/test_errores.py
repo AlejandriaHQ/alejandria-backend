@@ -163,6 +163,14 @@ class LibrosErroresTests(BaseAPITest):
         self.assertIsNone(response.data['datos'])
         self.assertIn('maxPages', response.data)
 
+    def test_pagina_no_numerica(self):
+        # F16 pentest: page no numérico se rechaza con 400 (antes se
+        # degradaba silenciosamente a página 1).
+        url = f"{reverse('libro-paginar')}?page=abc"
+        response = self.client.get(url)
+
+        self.assert_envelope_error(response)
+
 
 class UsuariosErroresTests(BaseAPITest):
     """Errores del recurso Usuarios, incluyendo el manejo de contraseñas."""

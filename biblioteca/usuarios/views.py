@@ -185,10 +185,16 @@ class UsuarioViewSet(viewsets.ModelViewSet):
         paginator = Paginator(cont, pagesize)
         total_pages = paginator.num_pages
 
-        try:
-            page = int(page)
-        except (ValueError, TypeError):
+        # F16 pentest: si page viene y no es un entero válido se responde 400
+        # con el envelope (antes se degradaba silenciosamente a página 1);
+        # si no viene, se usa la página 1.
+        if page is None:
             page = 1
+        else:
+            try:
+                page = int(page)
+            except (ValueError, TypeError):
+                return Result.Error("El parámetro page debe ser un número entero")
 
         if page > total_pages or page < 1:
             return Result.ErrorResponsePaginator("No se encuentra esta página", total_pages, page)
