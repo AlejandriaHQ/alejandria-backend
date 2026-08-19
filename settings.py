@@ -143,8 +143,8 @@ SPECTACULAR_SETTINGS = {
     'DESCRIPTION': 'API de gestión de la biblioteca Alejandría.',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
-    # F11 pentest: el schema OpenAPI (/swagger/, /redoc/) exige autenticación.
-    'SERVE_PERMISSIONS': ['rest_framework.permissions.IsAuthenticated'],
+    # /swagger/ y /redoc/ son públicos (documentación abierta por decisión del equipo).
+    'SERVE_PERMISSIONS': ['rest_framework.permissions.AllowAny'],
 }
 
 # Configuración de Django REST Framework
