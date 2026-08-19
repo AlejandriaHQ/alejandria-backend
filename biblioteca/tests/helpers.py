@@ -6,8 +6,10 @@ aserciones del envelope JSON que usa el API
 """
 from datetime import date, timedelta
 
+from django.contrib.auth import get_user_model
 from rest_framework.status import HTTP_200_OK, HTTP_400_BAD_REQUEST
 from rest_framework.test import APITestCase
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from biblioteca.models import Categoria, Libro, Prestamo, Usuario
 
@@ -17,6 +19,23 @@ _correo_counter = 0
 
 class BaseAPITest(APITestCase):
     """Base con helpers para crear fixtures y verificar el envelope JSON."""
+
+    # ------------------------------------------------------------------ #
+    # Configuración
+    # ------------------------------------------------------------------ #
+    def setUp(self):
+        super().setUp()
+        # La API exige autenticación JWT (IsAuthenticated por defecto).
+        # Se crea un usuario de Django auth (distinto del modelo Usuario del
+        # dominio) y se fija su Bearer token en el cliente para que TODOS
+        # los requests de la prueba queden autenticados.
+        self.auth_user = get_user_model().objects.create_user(
+            username='usuario-auth-test',
+            password='clave-auth-123',
+        )
+        refresh = RefreshToken.for_user(self.auth_user)
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f'Bearer {refresh.access_token}')
 
     # ------------------------------------------------------------------ #
     # Fixtures

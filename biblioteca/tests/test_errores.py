@@ -11,6 +11,7 @@ from django.urls import reverse
 from rest_framework.status import (
     HTTP_201_CREATED,
     HTTP_400_BAD_REQUEST,
+    HTTP_401_UNAUTHORIZED,
     HTTP_404_NOT_FOUND,
 )
 
@@ -72,6 +73,7 @@ class LibrosErroresTests(BaseAPITest):
     """Errores del recurso Libros."""
 
     def setUp(self):
+        super().setUp()
         self.categoria = self.crear_categoria(nombre='Ficción')
 
     def test_isbn_duplicado(self):
@@ -239,6 +241,7 @@ class PrestamosErroresTests(BaseAPITest):
     """Errores del recurso Prestamos."""
 
     def setUp(self):
+        super().setUp()
         self.usuario = self.crear_usuario(correo='juan@test.com')
         self.libro = self.crear_libro(titulo='Dune', isbn='978-1', cantidad=5)
 
@@ -302,3 +305,15 @@ class PrestamosErroresTests(BaseAPITest):
         # El préstamo no debe haber cambiado.
         prestamo.refresh_from_db()
         self.assertEqual(prestamo.estado, Prestamo.ESTADO_PRESTADO)
+
+
+class AccesoAnonimoTests(BaseAPITest):
+    """La API ya no es anónima: sin token JWT se rechaza con 401 (F01)."""
+
+    def test_sin_token_devuelve_401(self):
+        # Se limpian las credenciales que setUp dejó en el cliente.
+        self.client.credentials()
+
+        response = self.client.get(reverse('categoria-list'))
+
+        self.assertEqual(response.status_code, HTTP_401_UNAUTHORIZED)

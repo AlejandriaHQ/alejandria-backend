@@ -18,6 +18,7 @@ class PrestamosReglasStockTests(BaseAPITest):
     """Reglas de negocio de stock en préstamos."""
 
     def setUp(self):
+        super().setUp()
         self.usuario = self.crear_usuario(correo='juan@test.com')
         self.libro = self.crear_libro(titulo='Dune', isbn='978-1', cantidad=5)
         self.hoy = date.today()
@@ -142,6 +143,7 @@ class PrestamosTransicionAtrasadoTests(BaseAPITest):
     """Transición automática Prestado -> Atrasado."""
 
     def setUp(self):
+        super().setUp()
         self.usuario = self.crear_usuario(correo='juan@test.com')
         self.libro = self.crear_libro(titulo='Dune', isbn='978-1', cantidad=5)
         self.hoy = date.today()

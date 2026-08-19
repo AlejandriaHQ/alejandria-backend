@@ -116,6 +116,7 @@ class LibrosCRUDTests(BaseAPITest):
     """CRUD y paginación del recurso Libros."""
 
     def setUp(self):
+        super().setUp()
         self.categoria = self.crear_categoria(nombre='Ficción')
 
     def test_listar_libros_vacia(self):
@@ -325,6 +326,7 @@ class PrestamosCRUDTests(BaseAPITest):
     """CRUD y paginación del recurso Prestamos."""
 
     def setUp(self):
+        super().setUp()
         self.usuario = self.crear_usuario(correo='juan@test.com')
         self.libro = self.crear_libro(titulo='Dune', isbn='978-11', cantidad=5)
 
