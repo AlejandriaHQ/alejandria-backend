@@ -1,6 +1,13 @@
 from rest_framework import serializers
 from ..models import Usuario
 
+# F09 pentest: el mensaje de correo duplicado NO debe confirmar que el correo
+# ya está registrado, porque eso permite enumerar cuentas existentes. Se usa un
+# mensaje genérico (idéntico para CREATE y UPDATE) que no distingue entre
+# "correo en uso" y "datos no válidos". Compensación asumida: es menos amigable
+# para el usuario legítimo, pero elimina el vector de enumeración de cuentas.
+MENSAJE_CORREO_NO_DISPONIBLE = "No se pudo completar la operación. Revise los datos enviados."
+
 #Usuario Serializer
 
 class UsuarioSerializer(serializers.ModelSerializer):
@@ -16,7 +23,7 @@ class UsuarioSerializer(serializers.ModelSerializer):
 class UsuarioSerializerReg(serializers.ModelSerializer):
     # correo se declara explícitamente con validators=[] para desactivar el
     # UniqueValidator automático de DRF (mensaje en inglés) y delegar la
-    # detección de duplicados a validate_correo con un mensaje claro.
+    # detección de duplicados a validate_correo con un mensaje controlado.
     correo = serializers.EmailField(max_length=150, validators=[])
 
     class Meta:
@@ -28,10 +35,12 @@ class UsuarioSerializerReg(serializers.ModelSerializer):
         }
 
     def validate_correo(self, value):
-        # Mensaje claro en lugar del genérico "Complete los campos vacios":
-        # detecta el duplicado de correo antes de que DRF/la BD lo rechace.
+        # Se detecta el duplicado antes de que DRF/la BD lo rechace, pero se
+        # responde con un mensaje GENÉRICO (F09): "no se pudo completar" no
+        # confirma que el correo exista, por lo que no se puede enumerar
+        # cuentas registradas. El cliente solo sabe que algo no fue válido.
         if Usuario.objects.filter(correo=value).exists():
-            raise serializers.ValidationError("Ya existe un usuario con ese correo")
+            raise serializers.ValidationError(MENSAJE_CORREO_NO_DISPONIBLE)
         return value
 
 
@@ -49,12 +58,13 @@ class UsuarioSerializerUpdate(serializers.ModelSerializer):
 
     def validate_correo(self, value):
         # En update se excluye el propio registro para que reenviar el mismo
-        # correo no se considere duplicado.
+        # correo no se considere duplicado. Mismo mensaje genérico que en
+        # create (F09): no revela si el correo pertenece a otra cuenta.
         qs = Usuario.objects.filter(correo=value)
         if self.instance is not None:
             qs = qs.exclude(pk=self.instance.pk)
         if qs.exists():
-            raise serializers.ValidationError("Ya existe un usuario con ese correo")
+            raise serializers.ValidationError(MENSAJE_CORREO_NO_DISPONIBLE)
         return value
 
     def update(self, instance, validated_data):

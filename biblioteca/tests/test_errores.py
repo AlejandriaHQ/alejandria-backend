@@ -188,9 +188,11 @@ class UsuariosErroresTests(BaseAPITest):
         )
 
         self.assert_envelope_error(response)
-        # El mensaje es claro (duplicado), no el genérico "Complete los campos vacios".
+        # F09 pentest: el mensaje es GENÉRICO a propósito — no confirma que el
+        # correo ya existe (evita enumerar cuentas). Antes decía "Ya existe un
+        # usuario con ese correo", lo que permitía saber si una cuenta existía.
         self.assertEqual(response.data['Mensaje']['correo'][0],
-                         'Ya existe un usuario con ese correo')
+                         'No se pudo completar la operación. Revise los datos enviados.')
 
     def test_crear_sin_password(self):
         response = self.client.post(
