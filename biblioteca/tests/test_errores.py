@@ -271,6 +271,22 @@ class PrestamosErroresTests(BaseAPITest):
 
         self.assert_envelope_error(response)
 
+    def test_fecha_prestamo_fuera_de_rango_rechazada(self):
+        # F12 pentest: una fecha de préstamo muy retroactiva (hace más de un
+        # año) o demasiado futura se rechaza con 400 y un mensaje claro.
+        hoy = date.today()
+        for dias in (-400, 400):
+            response = self.client.post(
+                reverse('prestamo-list'),
+                {'id_usuario': self.usuario.id_usuario,
+                 'id_libro': self.libro.id_libro,
+                 'fecha_prestamo': (hoy + timedelta(days=dias)).isoformat()},
+                format='json',
+            )
+
+            self.assert_envelope_error(response)
+            self.assertIn('fecha_prestamo', response.data['Mensaje'])
+
     def test_view_inexistente(self):
         response = self.client.get(reverse('prestamo-detail', args=[9999]))
 
