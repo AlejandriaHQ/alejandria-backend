@@ -57,8 +57,16 @@ def _obtener_secret_key():
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = _obtener_secret_key()
 
+# F05 pentest: whitelist de hosts por entorno. Sin DJANGO_ALLOWED_HOSTS se usa
+# un default seguro para desarrollo local ('testserver' lo necesita el test
+# client de Django). En producción define DJANGO_ALLOWED_HOSTS con los dominios
+# reales separados por comas; NUNCA uses '*' fuera de desarrollo.
 ALLOWED_HOSTS = [
-    h.strip() for h in os.environ.get('DJANGO_ALLOWED_HOSTS', '*').split(',')
+    h.strip() for h in os.environ.get(
+        'DJANGO_ALLOWED_HOSTS',
+        'localhost,127.0.0.1,testserver',
+    ).split(',')
+    if h.strip()
 ]
 
 
