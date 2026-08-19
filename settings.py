@@ -134,6 +134,28 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
+    # F04 pentest: límites de requests por hora para mitigar el spam ilimitado.
+    # - AnonRateThrottle protege los endpoints públicos (p.ej. POST /token/
+    #   contra fuerza bruta de credenciales). En los endpoints autenticados el
+    #   chequeo de permisos (IsAuthenticated) responde 401 ANTES del throttle,
+    #   por lo que un anónimo jamás consume su cuota ahí.
+    # - UserRateThrottle limita el tráfico por usuario autenticado (1000/h);
+    #   también acota el spam de escritura (POST/PUT) de cada cuenta.
+    # Decisión: NO se añade ScopedRateThrottle para acciones de creación: el
+    # scope se aplica a TODA la vista (también a los GET de lectura) y el
+    # límite general por usuario ya pone tope al spam de escritura. Si en el
+    # futuro se quiere un límite más estricto solo para POST, conviene un
+    # throttle personalizado por acción, no un scope de vista.
+    # Nota: el throttle usa la caché de Django (LocMemCache en desarrollo);
+    # en producción conviene una caché compartida como Redis.
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '100/hour',
+        'user': '1000/hour',
+    },
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
