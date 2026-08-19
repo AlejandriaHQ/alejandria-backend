@@ -30,6 +30,9 @@ def inicio(request):
 # 1. Rutas Globales
 urlpatterns = [
     path('', inicio, name='inicio'),
+    # /admin/ (F08 pentest): el Django admin nativo NO tiene protección contra
+    # fuerza bruta por defecto. En producción debe restringirse por red/IP o
+    # añadir django-axes. NO exponerlo públicamente.
     path('admin/', admin.site.urls),
 
     # Rutas para la documentación (Swagger y ReDoc)
