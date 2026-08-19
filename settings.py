@@ -78,6 +78,24 @@ CORS_ALLOW_HEADERS = list(default_headers) + [
     "Authorization"
 ]
 
+# --------------------------------------------------------------------------- #
+# Seguridad de transporte (F07 pentest)
+# Flags leídos del entorno: apagados por defecto (desarrollo sobre HTTP) y
+# activados desde .env en producción, donde el HTTPS lo termina el
+# proxy/balanceador. SECURE_SSL_REDIRECT y las cookies Secure requieren que
+# la app se sirva realmente por HTTPS.
+# --------------------------------------------------------------------------- #
+SECURE_SSL_REDIRECT = os.environ.get('DJANGO_SECURE_SSL_REDIRECT', 'false').lower() in ('true', '1', 'yes')
+SESSION_COOKIE_SECURE = os.environ.get('DJANGO_SESSION_COOKIE_SECURE', 'false').lower() in ('true', '1', 'yes')
+CSRF_COOKIE_SECURE = os.environ.get('DJANGO_CSRF_COOKIE_SECURE', 'false').lower() in ('true', '1', 'yes')
+# HSTS: 0 (o ausente) en desarrollo; segundos de vigencia (>0) en producción.
+SECURE_HSTS_SECONDS = int(os.environ.get('DJANGO_SECURE_HSTS_SECONDS', '0'))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = os.environ.get('DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS', 'false').lower() in ('true', '1', 'yes')
+SECURE_HSTS_PRELOAD = os.environ.get('DJANGO_SECURE_HSTS_PRELOAD', 'false').lower() in ('true', '1', 'yes')
+# Seguras en cualquier entorno (sin impacto en desarrollo):
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = 'same-origin'
+
 # Application definition
 
 INSTALLED_APPS = [
