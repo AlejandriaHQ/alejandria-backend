@@ -15,6 +15,8 @@ from pathlib import Path
 import os
 from dotenv import load_dotenv
 from corsheaders.defaults import default_headers
+from django.core.exceptions import ImproperlyConfigured
+from django.core.management.utils import get_random_secret_key
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent
@@ -26,14 +28,34 @@ load_dotenv(BASE_DIR / '.env')
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get(
-    'DJANGO_SECRET_KEY',
-    'django-insecure-!xp3fvs)-n21d#rw6)@m^3@%2h%-z3i6(=0u=t2o*_id5al@&w'
-)
-
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DJANGO_DEBUG', 'true').lower() in ('true', '1', 'yes')
+
+
+def _obtener_secret_key():
+    """Devuelve la SECRET_KEY de Django (F02 pentest).
+
+    - Si DJANGO_SECRET_KEY está definida en el entorno, se usa tal cual.
+    - Si no está definida y DEBUG es True (desarrollo/tests sin .env), se
+      genera una clave aleatoria distinta en cada arranque: es segura para
+      desarrollo porque las sesiones/firmas no persisten entre reinicios.
+    - Si no está definida y DEBUG es False, se aborta el arranque: en
+      producción la clave es OBLIGATORIA y no se permite un fallback.
+    """
+    clave = os.environ.get('DJANGO_SECRET_KEY')
+    if clave:
+        return clave
+    if DEBUG:
+        return get_random_secret_key()
+    raise ImproperlyConfigured(
+        "DJANGO_SECRET_KEY no está definida. Copia .env.example a .env y "
+        "genera una clave segura (python -c \"from django.core.management."
+        "utils import get_random_secret_key; print(get_random_secret_key())\")."
+    )
+
+
+# SECURITY WARNING: keep the secret key used in production secret!
+SECRET_KEY = _obtener_secret_key()
 
 ALLOWED_HOSTS = [
     h.strip() for h in os.environ.get('DJANGO_ALLOWED_HOSTS', '*').split(',')
