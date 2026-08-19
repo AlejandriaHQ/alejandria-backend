@@ -70,8 +70,22 @@ ALLOWED_HOSTS = [
 ]
 
 
-#Cors
-CORS_ALLOW_ALL_ORIGINS = os.environ.get('DJANGO_CORS_ALLOW_ALL', 'true').lower() in ('true', '1', 'yes')
+# F06 pentest: CORS por whitelist de orígenes, no ALLOW_ALL.
+# - DJANGO_CORS_ALLOWED_ORIGINS (separada por comas) define los orígenes en
+#   producción/desarrollo; sin la variable se usa un default seguro de
+#   desarrollo (frontend Ionic dev en el puerto 8100).
+# - DJANGO_CORS_ALLOW_ALL se conserva SOLO por compatibilidad con despliegues
+#   anteriores y su default es False: en producción debe permanecer False.
+#   Preferir siempre la whitelist explícita.
+_CORS_ALLOW_ALL = os.environ.get('DJANGO_CORS_ALLOW_ALL', 'false').lower() in ('true', '1', 'yes')
+CORS_ALLOW_ALL_ORIGINS = _CORS_ALLOW_ALL
+CORS_ALLOWED_ORIGINS = [
+    o.strip() for o in os.environ.get(
+        'DJANGO_CORS_ALLOWED_ORIGINS',
+        'http://localhost:8100,http://127.0.0.1:8100',
+    ).split(',')
+    if o.strip()
+]
 CORS_ALLOW_METHODS = [
     "DELETE",
     "GET",
