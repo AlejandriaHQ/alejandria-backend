@@ -19,13 +19,13 @@ class PrestamosReglasStockTests(BaseAPITest):
 
     def setUp(self):
         super().setUp()
-        self.usuario = self.crear_usuario(correo='juan@test.com')
+        self.usuario = self.crear_usuario(email='juan@test.com')
         self.libro = self.crear_libro(titulo='Dune', isbn='978-1', cantidad=5)
         self.hoy = date.today()
 
     def crear_prestamo_via_api(self, fecha_devolucion=None):
         payload = {
-            'id_usuario': self.usuario.id_usuario,
+            'id_usuario': self.usuario.id,
             'id_libro': self.libro.id_libro,
             'fecha_prestamo': self.hoy.isoformat(),
         }
@@ -65,7 +65,7 @@ class PrestamosReglasStockTests(BaseAPITest):
 
         response = self.client.put(
             reverse('prestamo-detail', args=[prestamo_id]),
-            {'id_usuario': self.usuario.id_usuario,
+            {'id_usuario': self.usuario.id,
              'id_libro': self.libro.id_libro,
              'fecha_prestamo': self.hoy.isoformat(),
              'fecha_devolucion': (self.hoy + timedelta(days=7)).isoformat(),
@@ -100,7 +100,7 @@ class PrestamosReglasStockTests(BaseAPITest):
         # Devolver: el stock vuelve a 5.
         self.client.put(
             reverse('prestamo-detail', args=[prestamo_id]),
-            {'id_usuario': self.usuario.id_usuario,
+            {'id_usuario': self.usuario.id,
              'id_libro': self.libro.id_libro,
              'fecha_prestamo': self.hoy.isoformat(),
              'fecha_devolucion': (self.hoy + timedelta(days=7)).isoformat(),
@@ -126,7 +126,7 @@ class PrestamosReglasStockTests(BaseAPITest):
         # Actualización sin cambiar el estado: el stock no debe moverse.
         response = self.client.put(
             reverse('prestamo-detail', args=[prestamo_id]),
-            {'id_usuario': self.usuario.id_usuario,
+            {'id_usuario': self.usuario.id,
              'id_libro': self.libro.id_libro,
              'fecha_prestamo': (self.hoy + timedelta(days=1)).isoformat(),
              'fecha_devolucion': (self.hoy + timedelta(days=10)).isoformat(),
@@ -144,7 +144,7 @@ class PrestamosTransicionAtrasadoTests(BaseAPITest):
 
     def setUp(self):
         super().setUp()
-        self.usuario = self.crear_usuario(correo='juan@test.com')
+        self.usuario = self.crear_usuario(email='juan@test.com')
         self.libro = self.crear_libro(titulo='Dune', isbn='978-1', cantidad=5)
         self.hoy = date.today()
 
@@ -210,7 +210,7 @@ class PrestamosTransicionAtrasadoTests(BaseAPITest):
         # la normalización al inicio de update deja el préstamo como Atrasado.
         response = self.client.put(
             reverse('prestamo-detail', args=[prestamo.id_prestamo]),
-            {'id_usuario': self.usuario.id_usuario,
+            {'id_usuario': self.usuario.id,
              'id_libro': self.libro.id_libro,
              'fecha_prestamo': (self.hoy - timedelta(days=10)).isoformat(),
              'fecha_devolucion': (self.hoy - timedelta(days=5)).isoformat()},

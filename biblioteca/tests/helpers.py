@@ -9,7 +9,6 @@ from datetime import date, timedelta
 from django.contrib.auth import get_user_model
 from rest_framework.status import HTTP_200_OK, HTTP_400_BAD_REQUEST
 from rest_framework.test import APITestCase
-from rest_framework_simplejwt.tokens import RefreshToken
 
 from biblioteca.models import Categoria, Libro, Prestamo, Usuario
 
@@ -25,17 +24,29 @@ class BaseAPITest(APITestCase):
     # ------------------------------------------------------------------ #
     def setUp(self):
         super().setUp()
-        # La API exige autenticación JWT (IsAuthenticated por defecto).
-        # Se crea un usuario de Django auth (distinto del modelo Usuario del
-        # dominio) y se fija su Bearer token en el cliente para que TODOS
-        # los requests de la prueba queden autenticados.
-        self.auth_user = get_user_model().objects.create_user(
-            username='usuario-auth-test',
-            password='clave-auth-123',
+        # La API exige autenticación (IsAuthenticated por defecto) y solo
+        # admite ESCRITURA de usuarios con role='admin' o is_staff. Se
+        # autentica el cliente con force_authenticate como un admin NO
+        # persistido: el guard de la vista ve role/is_staff, pero el admin
+        # no contamina listados ni conteos (no aparece en Usuario.objects).
+        self.auth_user = get_user_model()(
+            username='admin-auth-test',
+            email='admin-auth@test.com',
+            first_name='Admin',
+            last_name='Auth',
+            role='admin',
+            is_staff=True,
         )
-        refresh = RefreshToken.for_user(self.auth_user)
-        self.client.credentials(
-            HTTP_AUTHORIZATION=f'Bearer {refresh.access_token}')
+        self.client.force_authenticate(user=self.auth_user)
+
+    def autenticar_como(self, usuario):
+        """Autentica el cliente como un usuario arbitrario (force_authenticate).
+
+        force_authenticate fija request.user directamente y anula cualquier
+        token JWT previo, por lo que reemplaza limpiamente al admin del setUp
+        (p. ej. para probar la protección por rol con un usuario común).
+        """
+        self.client.force_authenticate(user=usuario)
 
     # ------------------------------------------------------------------ #
     # Fixtures
@@ -55,18 +66,26 @@ class BaseAPITest(APITestCase):
             id_categoria=categoria,
         )
 
-    def crear_usuario(self, nombre="Juan", apellido="Perez", correo=None,
-                      password="secreto123"):
+    def crear_usuario(self, first_name="Juan", last_name="Perez", email=None,
+                      password="secreto123", role="user", cedula=None,
+                      phone=None, address=None):
         global _correo_counter
-        if correo is None:
+        if email is None:
             _correo_counter += 1
-            correo = f"usuario{_correo_counter}@test.com"
-        return Usuario.objects.create(
-            nombre=nombre,
-            apellido=apellido,
-            correo=correo,
-            password=password,
+            email = f"usuario{_correo_counter}@test.com"
+        # set_password es OBLIGATORIO: AbstractUser no hashea en save().
+        usuario = Usuario(
+            first_name=first_name,
+            last_name=last_name,
+            email=email,
+            role=role,
+            cedula=cedula,
+            phone=phone,
+            address=address,
         )
+        usuario.set_password(password)
+        usuario.save()
+        return usuario
 
     def crear_prestamo(self, usuario=None, libro=None, fecha_prestamo=None,
                        fecha_devolucion=None, estado=Prestamo.ESTADO_PRESTADO):

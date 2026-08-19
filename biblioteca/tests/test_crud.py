@@ -217,7 +217,22 @@ class LibrosCRUDTests(BaseAPITest):
 
 
 class UsuariosCRUDTests(BaseAPITest):
-    """CRUD y paginación del recurso Usuarios."""
+    """CRUD y paginación del recurso Usuarios (modelo AbstractUser)."""
+
+    # Payload mínimo válido del panel admin.
+    def payload_usuario(self, **overrides):
+        payload = {
+            'first_name': 'Juan',
+            'last_name': 'Perez',
+            'email': 'juan@test.com',
+            'password': 'clave-secreta-1',
+            'phone': '809-555-1234',
+            'cedula': '001-1234567-8',
+            'address': 'Calle 5, Santo Domingo',
+            'role': 'user',
+        }
+        payload.update(overrides)
+        return payload
 
     def test_listar_usuarios_vacia(self):
         response = self.client.get(reverse('usuario-list'))
@@ -226,87 +241,114 @@ class UsuariosCRUDTests(BaseAPITest):
         self.assertEqual(response.data['datos'], [])
 
     def test_listar_usuarios(self):
-        self.crear_usuario(nombre='Juan', apellido='Perez', correo='juan@test.com')
-        self.crear_usuario(nombre='Ana', apellido='Lopez', correo='ana@test.com')
+        self.crear_usuario(first_name='Juan', last_name='Perez', email='juan@test.com')
+        self.crear_usuario(first_name='Ana', last_name='Lopez', email='ana@test.com')
 
         response = self.client.get(reverse('usuario-list'))
 
         self.assert_envelope_exitosa(response)
         self.assertEqual(len(response.data['datos']), 2)
-        correos = {item['correo'] for item in response.data['datos']}
+        correos = {item['email'] for item in response.data['datos']}
         self.assertEqual(correos, {'juan@test.com', 'ana@test.com'})
 
     def test_crear_usuario(self):
         response = self.client.post(
             reverse('usuario-list'),
-            {'nombre': 'Juan', 'apellido': 'Perez', 'correo': 'juan@test.com',
-             'password': 'clave-secreta-1', 'telefono': '555-1234'},
+            self.payload_usuario(),
             format='json',
         )
 
         self.assert_envelope_exitosa(response, HTTP_201_CREATED)
         self.assertEqual(Usuario.objects.count(), 1)
         usuario = Usuario.objects.get()
-        self.assertEqual(response.data['datos']['id_usuario'], usuario.id_usuario)
-        self.assertEqual(response.data['datos']['correo'], 'juan@test.com')
+        self.assertEqual(response.data['datos']['id'], usuario.id)
+        self.assertEqual(response.data['datos']['email'], 'juan@test.com')
+        self.assertNotIn('password', response.data['datos'])
+
+    def test_crear_usuario_genera_identifier_mem(self):
+        response = self.client.post(
+            reverse('usuario-list'),
+            self.payload_usuario(role='user'),
+            format='json',
+        )
+
+        self.assert_envelope_exitosa(response, HTTP_201_CREATED)
+        identifier = response.data['datos']['identifier']
+        self.assertTrue(identifier.startswith('MEM-'))
+        self.assertEqual(Usuario.objects.get().identifier, identifier)
+
+    def test_crear_admin_genera_identifier_adm(self):
+        response = self.client.post(
+            reverse('usuario-list'),
+            self.payload_usuario(email='admin1@test.com', role='admin'),
+            format='json',
+        )
+
+        self.assert_envelope_exitosa(response, HTTP_201_CREATED)
+        self.assertTrue(response.data['datos']['identifier'].startswith('ADM-'))
+        usuario = Usuario.objects.get(email='admin1@test.com')
+        self.assertEqual(usuario.role, 'admin')
+        self.assertTrue(usuario.is_staff)
 
     def test_ver_usuario_por_id(self):
-        usuario = self.crear_usuario(correo='juan@test.com')
+        usuario = self.crear_usuario(email='juan@test.com')
 
-        response = self.client.get(reverse('usuario-detail', args=[usuario.id_usuario]))
+        response = self.client.get(reverse('usuario-detail', args=[usuario.id]))
 
         self.assert_envelope_exitosa(response)
-        self.assertEqual(response.data['datos']['id_usuario'], usuario.id_usuario)
-        self.assertEqual(response.data['datos']['correo'], 'juan@test.com')
+        self.assertEqual(response.data['datos']['id'], usuario.id)
+        self.assertEqual(response.data['datos']['email'], 'juan@test.com')
 
-    def test_actualizar_usuario(self):
-        usuario = self.crear_usuario(nombre='Juan', apellido='Perez',
-                                     correo='juan@test.com')
+    def test_actualizar_usuario_con_password(self):
+        usuario = self.crear_usuario(first_name='Juan', last_name='Perez',
+                                     email='juan@test.com')
 
         response = self.client.put(
-            reverse('usuario-detail', args=[usuario.id_usuario]),
-            {'nombre': 'Juan Carlos', 'apellido': 'Perez', 'correo': 'juan@test.com',
-             'password': 'nueva-clave-1', 'telefono': '555-9999'},
+            reverse('usuario-detail', args=[usuario.id]),
+            self.payload_usuario(first_name='Juan Carlos', phone='809-555-9999'),
             format='json',
         )
 
         self.assert_envelope_exitosa(response)
         usuario.refresh_from_db()
-        self.assertEqual(usuario.nombre, 'Juan Carlos')
-        self.assertEqual(usuario.telefono, '555-9999')
-        self.assertTrue(usuario.check_password('nueva-clave-1'))
+        self.assertEqual(usuario.first_name, 'Juan Carlos')
+        self.assertEqual(usuario.phone, '809-555-9999')
+        self.assertTrue(usuario.check_password('clave-secreta-1'))
 
     def test_actualizar_usuario_sin_password_conserva_clave(self):
-        usuario = self.crear_usuario(nombre='Juan', apellido='Perez',
-                                     correo='juan@test.com',
+        usuario = self.crear_usuario(first_name='Juan', last_name='Perez',
+                                     email='juan@test.com',
                                      password='clave-original')
 
+        payload = self.payload_usuario(first_name='Juan Carlos',
+                                       phone='809-555-0000')
+        payload.pop('password')  # el PUT no reenvía la contraseña
+
         response = self.client.put(
-            reverse('usuario-detail', args=[usuario.id_usuario]),
-            {'nombre': 'Juan Carlos', 'apellido': 'Perez', 'correo': 'juan@test.com',
-             'telefono': '555-0000'},  # sin password
+            reverse('usuario-detail', args=[usuario.id]),
+            payload,
             format='json',
         )
 
         self.assert_envelope_exitosa(response)
         usuario.refresh_from_db()
-        self.assertEqual(usuario.nombre, 'Juan Carlos')
-        self.assertEqual(usuario.telefono, '555-0000')
+        self.assertEqual(usuario.first_name, 'Juan Carlos')
+        self.assertEqual(usuario.phone, '809-555-0000')
         # La contraseña antigua sigue siendo válida: no se pisó el hash.
         self.assertTrue(usuario.check_password('clave-original'))
 
     def test_eliminar_usuario(self):
-        usuario = self.crear_usuario(correo='juan@test.com')
+        usuario = self.crear_usuario(email='juan@test.com')
 
-        response = self.client.delete(reverse('usuario-detail', args=[usuario.id_usuario]))
+        response = self.client.delete(reverse('usuario-detail', args=[usuario.id]))
 
         self.assert_envelope_exitosa(response)
         self.assertEqual(Usuario.objects.count(), 0)
 
     def test_paginador_usuarios(self):
         for i in range(12):
-            self.crear_usuario(nombre=f'Usuario {i}', apellido='Test',
-                               correo=f'usuario{i}@test.com')
+            self.crear_usuario(first_name=f'Usuario {i}', last_name='Test',
+                               email=f'usuario{i}@test.com')
 
         pagina1 = self.client.get(f"{reverse('usuario-paginar')}?page=1")
         self.assert_envelope_exitosa(pagina1)
@@ -327,7 +369,7 @@ class PrestamosCRUDTests(BaseAPITest):
 
     def setUp(self):
         super().setUp()
-        self.usuario = self.crear_usuario(correo='juan@test.com')
+        self.usuario = self.crear_usuario(email='juan@test.com')
         self.libro = self.crear_libro(titulo='Dune', isbn='978-11', cantidad=5)
 
     def test_listar_prestamos_vacia(self):
@@ -349,7 +391,7 @@ class PrestamosCRUDTests(BaseAPITest):
         hoy = date.today()
         response = self.client.post(
             reverse('prestamo-list'),
-            {'id_usuario': self.usuario.id_usuario,
+            {'id_usuario': self.usuario.id,
              'id_libro': self.libro.id_libro,
              'fecha_prestamo': hoy.isoformat(),
              'fecha_devolucion': (hoy + timedelta(days=7)).isoformat()},
@@ -378,7 +420,7 @@ class PrestamosCRUDTests(BaseAPITest):
 
         response = self.client.put(
             reverse('prestamo-detail', args=[prestamo.id_prestamo]),
-            {'id_usuario': self.usuario.id_usuario,
+            {'id_usuario': self.usuario.id,
              'id_libro': self.libro.id_libro,
              'fecha_prestamo': hoy.isoformat(),
              'fecha_devolucion': (hoy + timedelta(days=14)).isoformat()},

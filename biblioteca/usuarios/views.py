@@ -3,7 +3,11 @@ from django.db import IntegrityError
 from django.db.models import Q, ProtectedError
 from rest_framework import viewsets
 from rest_framework.decorators import action
-from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED
+from rest_framework.status import (
+    HTTP_200_OK,
+    HTTP_201_CREATED,
+    HTTP_403_FORBIDDEN,
+)
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 
@@ -15,6 +19,22 @@ from .serializers import (
     UsuarioSerializerUpdate,
     UsuarioSerializerDelete,
 )
+
+
+# PROTECCIÓN DE ESCRITURA (roles) — cómo se implementó:
+# Solo un usuario con role='admin' o is_staff puede crear, actualizar o
+# eliminar usuarios; esto incluye la asignación de role='admin' en el payload
+# (un usuario común jamás llega al serializer, ni siquiera con role='admin').
+# La lectura (list/retrieve/paginar) queda abierta a cualquier usuario
+# autenticado (IsAuthenticated global en settings).
+# Se implementa con LÓGICA EN LA VISTA (y no con permission_classes de DRF)
+# para mantener el envelope JSON {success, Mensaje, datos} consistente:
+# PermissionDenied lanzaría un 403 con el body por defecto de DRF, fuera del
+# contrato que consume el frontend. La comprobación es role=='admin' OR
+# is_staff: así los superusuarios de Django (is_staff/is_superuser) también
+# administran el panel sin depender de su campo role.
+def _permiso_escritura_usuarios(request):
+    return request.user.role == 'admin' or request.user.is_staff
 
 
 def _obtener_o_none(queryset, pk):
@@ -56,18 +76,23 @@ class UsuarioViewSet(viewsets.ModelViewSet):
         responses={200: OpenApiTypes.OBJECT})
     def list(self, request):
         usuarios = Usuario.objects.all()
-        serializer = UsuarioSerializerReg(usuarios, many=True)
+        serializer = UsuarioSerializer(usuarios, many=True)
         return Result.Exitosa("Lista de usuarios obtenida correctamente", serializer.data)
 
     @extend_schema(
         description='Añade un nuevo usuario.',
         request=UsuarioSerializerReg,
-        responses={201: UsuarioSerializerReg, 400: OpenApiTypes.OBJECT})
+        responses={201: UsuarioSerializerReg, 400: OpenApiTypes.OBJECT, 403: OpenApiTypes.OBJECT})
     def create(self, request):
+        if not _permiso_escritura_usuarios(request):
+            return Result.Error("No tiene permisos para realizar esta acción", HTTP_403_FORBIDDEN)
+
         first_name = request.data.get('first_name')
         last_name = request.data.get('last_name')
         email = request.data.get('email')
         password = request.data.get('password')
+        role = request.data.get('role')
+        cedula = request.data.get('cedula')
 
         errores = []
         if not first_name:
@@ -78,6 +103,10 @@ class UsuarioViewSet(viewsets.ModelViewSet):
             errores.append("Complete la casilla email")
         if not password:
             errores.append("Complete la casilla password")
+        if not role:
+            errores.append("Complete la casilla role")
+        if not cedula:
+            errores.append("Complete la casilla cedula")
 
         if errores:
             return Result.Error(errores)
@@ -110,8 +139,11 @@ class UsuarioViewSet(viewsets.ModelViewSet):
     @extend_schema(
         description="Actualiza un usuario.",
         request=UsuarioSerializerUpdate,
-        responses={200: UsuarioSerializerUpdate, 400: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT})
+        responses={200: UsuarioSerializerUpdate, 400: OpenApiTypes.OBJECT, 403: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT})
     def update(self, request, pk=None):
+        if not _permiso_escritura_usuarios(request):
+            return Result.Error("No tiene permisos para realizar esta acción", HTTP_403_FORBIDDEN)
+
         first_name = request.data.get('first_name')
         last_name = request.data.get('last_name')
         email = request.data.get('email')
@@ -149,8 +181,11 @@ class UsuarioViewSet(viewsets.ModelViewSet):
 
     @extend_schema(
         description="Eliminar un usuario",
-        responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT})
+        responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT, 403: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT})
     def destroy(self, request, pk=None):
+        if not _permiso_escritura_usuarios(request):
+            return Result.Error("No tiene permisos para realizar esta acción", HTTP_403_FORBIDDEN)
+
         usuario = _obtener_o_none(Usuario.objects, pk)
         if not usuario:
             return Result.Error("Registro no encontrado", 404)
