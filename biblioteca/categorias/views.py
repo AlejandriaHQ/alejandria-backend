@@ -76,7 +76,11 @@ class CategoriaViewSet(viewsets.ModelViewSet):
         serialData = CategoriasSerializerReg(data=request.data)
 
         if not serialData.is_valid():
-            return Result.Error("Complete los campos vacios")
+            # F13 pentest: se devuelven los errores reales del serializer
+            # (p. ej. nombre con más de 100 caracteres) en lugar del genérico
+            # "Complete los campos vacios"; mismo patrón que libros, usuarios
+            # y préstamos.
+            return Result.Error(serialData.errors)
 
         try:
             serialData.save()
@@ -118,7 +122,9 @@ class CategoriaViewSet(viewsets.ModelViewSet):
         serialData = CategoriasSerializerUpdate(instance=categoria, data=request.data)
 
         if not serialData.is_valid():
-            return Result.Error("Complete los campos vacios")
+            # F13 pentest: se devuelven los errores reales del serializer en
+            # lugar del genérico "Complete los campos vacios" (ver create).
+            return Result.Error(serialData.errors)
 
         try:
             serialData.save()
