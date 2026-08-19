@@ -17,6 +17,19 @@ from .serializers import (
 )
 
 
+def _obtener_o_none(queryset, pk):
+    """Devuelve el registro por pk, o None si no existe o el pk no es numérico.
+
+    Un pk no numérico (p.ej. /libros/abc/) lanza ValueError al filtrar
+    sobre un AutoField; se captura para que el ViewSet responda 404 con el
+    envelope en lugar de un 500 (F03 pentest).
+    """
+    try:
+        return queryset.filter(pk=pk).first()
+    except (ValueError, TypeError):
+        return None
+
+
 page_paramView = OpenApiParameter(
     'page',
     OpenApiTypes.INT,
@@ -84,7 +97,7 @@ class LibroViewSet(viewsets.ModelViewSet):
         description="Obtener un libro por su ID",
         responses={200: LibroSerializer, 404: OpenApiTypes.OBJECT})
     def retrieve(self, request, pk=None):
-        libro = Libro.objects.filter(pk=pk).first()
+        libro = _obtener_o_none(Libro.objects, pk)
         if not libro:
             return Result.Error("Registro no encontrado", 404)
 
@@ -113,7 +126,7 @@ class LibroViewSet(viewsets.ModelViewSet):
         if errores:
             return Result.Error(errores)
 
-        libro = Libro.objects.filter(pk=pk).first()
+        libro = _obtener_o_none(Libro.objects, pk)
         if not libro:
             return Result.Error("Registro no encontrado", 404)
 
@@ -135,7 +148,7 @@ class LibroViewSet(viewsets.ModelViewSet):
         description="Eliminar un libro",
         responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT})
     def destroy(self, request, pk=None):
-        libro = Libro.objects.filter(pk=pk).first()
+        libro = _obtener_o_none(Libro.objects, pk)
         if not libro:
             return Result.Error("Registro no encontrado", 404)
 

@@ -17,6 +17,19 @@ from .serializers import (
 )
 
 
+def _obtener_o_none(queryset, pk):
+    """Devuelve el registro por pk, o None si no existe o el pk no es numérico.
+
+    Un pk no numérico (p.ej. /usuarios/abc/) lanza ValueError al filtrar
+    sobre un AutoField; se captura para que el ViewSet responda 404 con el
+    envelope en lugar de un 500 (F03 pentest).
+    """
+    try:
+        return queryset.filter(pk=pk).first()
+    except (ValueError, TypeError):
+        return None
+
+
 page_paramView = OpenApiParameter(
     'page',
     OpenApiTypes.INT,
@@ -87,7 +100,7 @@ class UsuarioViewSet(viewsets.ModelViewSet):
         description="Obtener un usuario por su ID",
         responses={200: UsuarioSerializer, 404: OpenApiTypes.OBJECT})
     def retrieve(self, request, pk=None):
-        usuario = Usuario.objects.filter(pk=pk).first()
+        usuario = _obtener_o_none(Usuario.objects, pk)
         if not usuario:
             return Result.Error("Registro no encontrado", 404)
 
@@ -116,7 +129,7 @@ class UsuarioViewSet(viewsets.ModelViewSet):
         if errores:
             return Result.Error(errores)
 
-        usuario = Usuario.objects.filter(pk=pk).first()
+        usuario = _obtener_o_none(Usuario.objects, pk)
         if not usuario:
             return Result.Error("Registro no encontrado", 404)
 
@@ -138,7 +151,7 @@ class UsuarioViewSet(viewsets.ModelViewSet):
         description="Eliminar un usuario",
         responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT})
     def destroy(self, request, pk=None):
-        usuario = Usuario.objects.filter(pk=pk).first()
+        usuario = _obtener_o_none(Usuario.objects, pk)
         if not usuario:
             return Result.Error("Registro no encontrado", 404)
 

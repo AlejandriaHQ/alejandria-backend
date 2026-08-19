@@ -19,6 +19,19 @@ from .serializers import (
 )
 
 
+def _obtener_o_none(queryset, pk):
+    """Devuelve el registro por pk, o None si no existe o el pk no es numérico.
+
+    Un pk no numérico (p.ej. /prestamos/abc/) lanza ValueError al filtrar
+    sobre un AutoField; se captura para que el ViewSet responda 404 con el
+    envelope en lugar de un 500 (F03 pentest).
+    """
+    try:
+        return queryset.filter(pk=pk).first()
+    except (ValueError, TypeError):
+        return None
+
+
 page_paramView = OpenApiParameter(
     'page',
     OpenApiTypes.INT,
@@ -108,7 +121,7 @@ class PrestamoViewSet(viewsets.ModelViewSet):
         responses={200: PrestamoSerializer, 404: OpenApiTypes.OBJECT})
     def retrieve(self, request, pk=None):
         _normalizar_atrasados()
-        prestamo = Prestamo.objects.filter(pk=pk).first()
+        prestamo = _obtener_o_none(Prestamo.objects, pk)
         if not prestamo:
             return Result.Error("Registro no encontrado", 404)
 
@@ -141,7 +154,7 @@ class PrestamoViewSet(viewsets.ModelViewSet):
         if errores:
             return Result.Error(errores)
 
-        prestamo = Prestamo.objects.filter(pk=pk).first()
+        prestamo = _obtener_o_none(Prestamo.objects, pk)
         if not prestamo:
             return Result.Error("Registro no encontrado", 404)
 
@@ -178,7 +191,7 @@ class PrestamoViewSet(viewsets.ModelViewSet):
         # para mantener el estado consistente antes de eliminar.
         _normalizar_atrasados()
 
-        prestamo = Prestamo.objects.filter(pk=pk).first()
+        prestamo = _obtener_o_none(Prestamo.objects, pk)
         if not prestamo:
             return Result.Error("Registro no encontrado", 404)
 

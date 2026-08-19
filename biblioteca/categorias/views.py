@@ -17,6 +17,19 @@ from .serializers import (
 )
 
 
+def _obtener_o_none(queryset, pk):
+    """Devuelve el registro por pk, o None si no existe o el pk no es numérico.
+
+    Un pk no numérico (p.ej. /categorias/abc/) lanza ValueError al filtrar
+    sobre un AutoField; se captura para que el ViewSet responda 404 con el
+    envelope en lugar de un 500 (F03 pentest).
+    """
+    try:
+        return queryset.filter(pk=pk).first()
+    except (ValueError, TypeError):
+        return None
+
+
 page_paramView = OpenApiParameter(
     'page',
     OpenApiTypes.INT,
@@ -76,7 +89,7 @@ class CategoriaViewSet(viewsets.ModelViewSet):
         description="Obtener una categoría por su ID",
         responses={200: CategoriasSerializer, 404: OpenApiTypes.OBJECT})
     def retrieve(self, request, pk=None):
-        categoria = Categoria.objects.filter(pk=pk).first()
+        categoria = _obtener_o_none(Categoria.objects, pk)
         if not categoria:
             return Result.Error("Registro no encontrado", 404)
 
@@ -98,7 +111,7 @@ class CategoriaViewSet(viewsets.ModelViewSet):
         if errores:
             return Result.Error(errores)
 
-        categoria = Categoria.objects.filter(pk=pk).first()
+        categoria = _obtener_o_none(Categoria.objects, pk)
         if not categoria:
             return Result.Error("Registro no encontrado", 404)
 
@@ -118,7 +131,7 @@ class CategoriaViewSet(viewsets.ModelViewSet):
         description="Eliminar un Categoria",
         responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT})
     def destroy(self, request, pk=None):
-        categoria = Categoria.objects.filter(pk=pk).first()
+        categoria = _obtener_o_none(Categoria.objects, pk)
         if not categoria:
             return Result.Error("Registro no encontrado", 404)
 
