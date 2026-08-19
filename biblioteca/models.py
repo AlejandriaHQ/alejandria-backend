@@ -1,7 +1,8 @@
 from datetime import date
-from django.db import models
-from django.contrib.auth.hashers import make_password, check_password
+from django.conf import settings
+from django.contrib.auth.models import AbstractUser
 from django.core.validators import MaxValueValidator, MinValueValidator
+from django.db import models
 
 
 # MODELO: Categorias
@@ -48,32 +49,84 @@ class Libro(models.Model):
 
 
 # MODELO: Usuarios
+# Usuario extiende AbstractUser y es el AUTH_USER_MODEL del proyecto
+# (settings.AUTH_USER_MODEL = 'biblioteca.Usuario'): los socios hacen login
+# real con email + password (JWT). first_name y last_name vienen de
+# AbstractUser; se añaden los campos de dominio del socio (phone, cedula,
+# address, identifier, role).
 
-class Usuario(models.Model):
-    id_usuario = models.AutoField(primary_key=True)
-    nombre = models.CharField(max_length=100)
-    apellido = models.CharField(max_length=100)
-    correo = models.EmailField(max_length=150, unique=True)
-    telefono = models.CharField(max_length=20, blank=True, null=True)
-    password = models.CharField(max_length=255)
+class Usuario(AbstractUser):
+    # username se autogenera en save() desde el email: AbstractUser lo exige
+    # como columna única NOT NULL, aunque el login usa email (USERNAME_FIELD).
+    email = models.EmailField(unique=True)  # override: AbstractUser no lo hace unique
+    phone = models.CharField(max_length=20, blank=True, null=True)
+    # Cédula dominicana con formato 000-0000000-0; el formato lo valida el
+    # serializer (el modelo solo la guarda).
+    cedula = models.CharField(max_length=15, unique=True, blank=True, null=True)
+    address = models.CharField(max_length=255, blank=True, null=True)
+    # Identificador público autogenerado e inmutable (ADM-<año>-<seq:04d> para
+    # admin, MEM-<año>-<seq:04d> para user). El frontend lo usa como
+    # credencial visible del socio; nunca se envía al crear/actualizar.
+    identifier = models.CharField(max_length=20, unique=True, blank=True, null=True)
+    role = models.CharField(
+        max_length=10,
+        choices=[('admin', 'admin'), ('user', 'user')],
+        default='user',
+    )
+
+    USERNAME_FIELD = 'email'
+    REQUIRED_FIELDS = ['first_name', 'last_name']
 
     class Meta:
-        db_table = 'usuarios'
+        # Sin db_table custom: AbstractUser ya usa 'auth_user' (la tabla única
+        # de usuarios del framework de auth).
         verbose_name_plural = 'Usuarios'
 
     def save(self, *args, **kwargs):
-        # Solo se hashea si la contraseña aún no es un hash válido de Django,
-        # así se evita re-hashear (y corromper) contraseñas ya almacenadas.
-        # Prefijos de hash reconocidos: pbkdf2_, argon2, bcrypt.
-        if not self.password.startswith(('pbkdf2_', 'argon2', 'bcrypt')):
-            self.password = make_password(self.password)
+        # 1) username obligatorio para AbstractUser: se autogenera desde el
+        #    email si viene vacío. El login es por email; el username es solo
+        #    un requisito técnico de la columna. Si el email ya fue usado por
+        #    otro username, se añade un sufijo numérico hasta hallar uno libre.
+        if not self.username:
+            base = (self.email or 'usuario').split('@')[0]
+            username = base
+            contador = 1
+            while Usuario.objects.filter(username=username).exists():
+                contador += 1
+                username = f'{base}{contador}'
+            self.username = username
+
+        # 2) identifier inmutable: solo se genera la primera vez (si ya tiene
+        #    valor no se regenera). Secuencia: si el registro ya tiene pk se
+        #    usa el propio pk (auto-incremento natural de la tabla, único por
+        #    definición); si aún no hay pk (primera inserción) se cuentan los
+        #    identificadores del mismo prefijo-año y se suma 1. Como el prefijo
+        #    incluye el año, dos usuarios de años distintos nunca colisionan.
+        if not self.identifier:
+            prefijo = 'ADM' if self.role == 'admin' else 'MEM'
+            anio = date.today().year
+            if self.pk:
+                seq = self.pk
+            else:
+                seq = Usuario.objects.filter(
+                    identifier__startswith=f'{prefijo}-{anio}'
+                ).count() + 1
+            self.identifier = f'{prefijo}-{anio}-{seq:04d}'
+
+        # 3) role e is_staff siempre consistentes. Un superusuario es admin
+        #    por definición; is_superuser no se toca (lo maneja createsuperuser).
+        if self.is_superuser:
+            self.role = 'admin'
+            self.is_staff = True
+        else:
+            self.is_staff = self.role == 'admin'
+
+        # El password lo hashea AbstractUser internamente (set_password /
+        # create_user); save() no reimplementa hashing.
         super().save(*args, **kwargs)
 
-    def check_password(self, raw_password):
-        return check_password(raw_password, self.password)
-
     def __str__(self):
-        return f"{self.nombre} {self.apellido}"
+        return self.get_full_name() or self.email
 
 
 
@@ -92,10 +145,15 @@ class Prestamo(models.Model):
     ]
 
     id_prestamo = models.AutoField(primary_key=True)
+    # FK al AUTH_USER_MODEL (Ahora Usuario es AbstractUser). Se mantiene el
+    # atributo Python id_usuario con db_column='id_usuario' para no romper el
+    # contrato del frontend, que espera el campo numérico userId/id_usuario en
+    # los préstamos. related_name='prestamos' da un acceso inverso claro.
     id_usuario = models.ForeignKey(
-        Usuario,
+        settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,  # No permite eliminar usuario con préstamos activos
-        db_column='id_usuario'
+        db_column='id_usuario',
+        related_name='prestamos',
     )
     id_libro = models.ForeignKey(
         Libro,

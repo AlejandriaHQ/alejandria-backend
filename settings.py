@@ -137,6 +137,11 @@ INSTALLED_APPS = [
     'biblioteca',
 ]
 
+# Modelo de usuario personalizado: biblioteca.Usuario extiende AbstractUser y
+# es el modelo de autenticación del proyecto. Definido ANTES de que cualquier
+# FK lo referencie al migrar (Prestamo.id_usuario apunta a AUTH_USER_MODEL).
+AUTH_USER_MODEL = 'biblioteca.Usuario'
+
 # Configuración de drf-spectacular (generación del esquema OpenAPI)
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Alejandría API',

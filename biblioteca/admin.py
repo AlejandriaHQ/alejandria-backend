@@ -17,14 +17,16 @@ class LibroAdmin(admin.ModelAdmin):
 
 @admin.register(Usuario)
 class UsuarioAdmin(admin.ModelAdmin):
-    list_display = ('nombre', 'apellido', 'correo', 'telefono')
-    search_fields = ('nombre', 'apellido', 'correo')
-    # No se expone la contraseña (ni en el formulario ni en la lista)
+    list_display = ('first_name', 'last_name', 'email', 'role', 'cedula', 'phone', 'identifier', 'is_staff')
+    search_fields = ('first_name', 'last_name', 'email', 'cedula', 'phone', 'identifier')
+    list_filter = ('role', 'is_staff')
+    # No se expone la contraseña (ni en el formulario ni en la lista);
+    # AbstractUser ya oculta el password y lo gestiona el framework.
     exclude = ('password',)
 
 
 @admin.register(Prestamo)
 class PrestamoAdmin(admin.ModelAdmin):
     list_display = ('id_usuario', 'id_libro', 'fecha_prestamo', 'fecha_devolucion', 'estado')
-    search_fields = ('id_usuario__nombre', 'id_usuario__apellido', 'id_libro__titulo', 'estado')
+    search_fields = ('id_usuario__first_name', 'id_usuario__last_name', 'id_libro__titulo', 'estado')
     list_filter = ('estado', 'fecha_prestamo')

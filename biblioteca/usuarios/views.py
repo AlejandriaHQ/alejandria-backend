@@ -64,18 +64,18 @@ class UsuarioViewSet(viewsets.ModelViewSet):
         request=UsuarioSerializerReg,
         responses={201: UsuarioSerializerReg, 400: OpenApiTypes.OBJECT})
     def create(self, request):
-        nombre = request.data.get('nombre')
-        apellido = request.data.get('apellido')
-        correo = request.data.get('correo')
+        first_name = request.data.get('first_name')
+        last_name = request.data.get('last_name')
+        email = request.data.get('email')
         password = request.data.get('password')
 
         errores = []
-        if not nombre:
-            errores.append("Complete la casilla nombre")
-        if not apellido:
-            errores.append("Complete la casilla apellido")
-        if not correo:
-            errores.append("Complete la casilla correo")
+        if not first_name:
+            errores.append("Complete la casilla first_name")
+        if not last_name:
+            errores.append("Complete la casilla last_name")
+        if not email:
+            errores.append("Complete la casilla email")
         if not password:
             errores.append("Complete la casilla password")
 
@@ -91,7 +91,7 @@ class UsuarioViewSet(viewsets.ModelViewSet):
                 return Result.Error("Ya existe un registro con ese valor único", 400)
         else:
             # Se devuelven los errores del serializer (p. ej. "Ya existe un usuario
-            # con ese correo") en lugar del mensaje genérico y engañoso.
+            # con ese email") en lugar del mensaje genérico y engañoso.
             return Result.Error(serialData.errors)
 
         return Result.Exitosa("Se registro correctamente", serialData.data, HTTP_201_CREATED)
@@ -112,19 +112,19 @@ class UsuarioViewSet(viewsets.ModelViewSet):
         request=UsuarioSerializerUpdate,
         responses={200: UsuarioSerializerUpdate, 400: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT})
     def update(self, request, pk=None):
-        nombre = request.data.get('nombre')
-        apellido = request.data.get('apellido')
-        correo = request.data.get('correo')
+        first_name = request.data.get('first_name')
+        last_name = request.data.get('last_name')
+        email = request.data.get('email')
 
         errores = []
-        if not nombre:
-            errores.append("Complete la casilla nombre")
+        if not first_name:
+            errores.append("Complete la casilla first_name")
 
-        if not apellido:
-            errores.append("Complete la casilla apellido")
+        if not last_name:
+            errores.append("Complete la casilla last_name")
 
-        if not correo:
-            errores.append("Complete la casilla correo")
+        if not email:
+            errores.append("Complete la casilla email")
 
         if errores:
             return Result.Error(errores)
@@ -142,7 +142,7 @@ class UsuarioViewSet(viewsets.ModelViewSet):
                 return Result.Error("Ya existe un registro con ese valor único", 400)
         else:
             # Se devuelven los errores del serializer (p. ej. "Ya existe un usuario
-            # con ese correo") en lugar del mensaje genérico y engañoso.
+            # con ese email") en lugar del mensaje genérico y engañoso.
             return Result.Error(serialData.errors)
 
         return Result.Exitosa("Se actualizo correctamente", serialData.data, HTTP_200_OK)
@@ -173,14 +173,14 @@ class UsuarioViewSet(viewsets.ModelViewSet):
         filter = request.GET.get('filter')
 
         if filter:
-            query = Q(nombre__icontains=filter) | \
-                    Q(apellido__icontains=filter) | \
-                    Q(correo__icontains=filter)
+            query = Q(first_name__icontains=filter) | \
+                    Q(last_name__icontains=filter) | \
+                    Q(email__icontains=filter)
 
-            cont = Usuario.objects.filter(query).order_by('id_usuario')
+            cont = Usuario.objects.filter(query).order_by('id')
 
         else:
-            cont = Usuario.objects.all().order_by('id_usuario')
+            cont = Usuario.objects.all().order_by('id')
 
         paginator = Paginator(cont, pagesize)
         total_pages = paginator.num_pages
