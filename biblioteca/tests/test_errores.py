@@ -152,7 +152,7 @@ class LibrosErroresTests(BaseAPITest):
 class UsuariosErroresTests(BaseAPITest):
     """Errores del recurso Usuarios, incluyendo el manejo de contraseñas."""
 
-    CONTRASENA_PLANA = 'clave-super-secreta-42'
+    PASSWORD_PLANA = 'clave-super-secreta-42'
 
     def test_correo_duplicado(self):
         self.crear_usuario(correo='juan@test.com')
@@ -160,7 +160,7 @@ class UsuariosErroresTests(BaseAPITest):
         response = self.client.post(
             reverse('usuario-list'),
             {'nombre': 'Juan', 'apellido': 'Perez', 'correo': 'juan@test.com',
-             'contrasena': 'otra-clave-1'},
+             'password': 'otra-clave-1'},
             format='json',
         )
 
@@ -169,7 +169,7 @@ class UsuariosErroresTests(BaseAPITest):
         self.assertEqual(response.data['Mensaje']['correo'][0],
                          'Ya existe un usuario con ese correo')
 
-    def test_crear_sin_contrasena(self):
+    def test_crear_sin_password(self):
         response = self.client.post(
             reverse('usuario-list'),
             {'nombre': 'Juan', 'apellido': 'Perez', 'correo': 'juan@test.com'},
@@ -187,7 +187,7 @@ class UsuariosErroresTests(BaseAPITest):
         response = self.client.put(
             reverse('usuario-detail', args=[9999]),
             {'nombre': 'Juan', 'apellido': 'Perez',
-             'correo': 'juan@test.com', 'contrasena': 'clave-1'},
+             'correo': 'juan@test.com', 'password': 'clave-1'},
             format='json',
         )
 
@@ -198,41 +198,41 @@ class UsuariosErroresTests(BaseAPITest):
 
         self.assert_envelope_error(response, HTTP_404_NOT_FOUND)
 
-    def test_contrasena_no_aparece_al_crear(self):
+    def test_password_no_aparece_al_crear(self):
         response = self.client.post(
             reverse('usuario-list'),
             {'nombre': 'Juan', 'apellido': 'Perez', 'correo': 'juan@test.com',
-             'contrasena': self.CONTRASENA_PLANA},
+             'password': self.PASSWORD_PLANA},
             format='json',
         )
 
         self.assert_envelope_exitosa(response, HTTP_201_CREATED)
-        self.assertNotIn('contrasena', response.data['datos'])
-        self.assertNotIn(self.CONTRASENA_PLANA, str(response.data))
+        self.assertNotIn('password', response.data['datos'])
+        self.assertNotIn(self.PASSWORD_PLANA, str(response.data))
 
-    def test_contrasena_no_aparece_en_lista_ni_view(self):
+    def test_password_no_aparece_en_lista_ni_view(self):
         usuario = self.crear_usuario(correo='juan@test.com',
-                                     contrasena=self.CONTRASENA_PLANA)
+                                     password=self.PASSWORD_PLANA)
 
         response_lista = self.client.get(reverse('usuario-list'))
         self.assert_envelope_exitosa(response_lista)
-        self.assertNotIn(self.CONTRASENA_PLANA, str(response_lista.data))
+        self.assertNotIn(self.PASSWORD_PLANA, str(response_lista.data))
         for item in response_lista.data['datos']:
-            self.assertNotIn('contrasena', item)
+            self.assertNotIn('password', item)
 
         response_view = self.client.get(
             reverse('usuario-detail', args=[usuario.id_usuario]))
         self.assert_envelope_exitosa(response_view)
-        self.assertNotIn(self.CONTRASENA_PLANA, str(response_view.data))
-        self.assertNotIn('contrasena', response_view.data['datos'])
+        self.assertNotIn(self.PASSWORD_PLANA, str(response_view.data))
+        self.assertNotIn('password', response_view.data['datos'])
 
-    def test_contrasena_almacenada_hasheada(self):
+    def test_password_almacenada_hasheada(self):
         usuario = self.crear_usuario(correo='juan@test.com',
-                                     contrasena=self.CONTRASENA_PLANA)
+                                     password=self.PASSWORD_PLANA)
 
-        self.assertNotEqual(usuario.contrasena, self.CONTRASENA_PLANA)
-        self.assertTrue(usuario.contrasena.startswith('pbkdf2_'))
-        self.assertTrue(usuario.check_contrasena(self.CONTRASENA_PLANA))
+        self.assertNotEqual(usuario.password, self.PASSWORD_PLANA)
+        self.assertTrue(usuario.password.startswith('pbkdf2_'))
+        self.assertTrue(usuario.check_password(self.PASSWORD_PLANA))
 
 
 class PrestamosErroresTests(BaseAPITest):

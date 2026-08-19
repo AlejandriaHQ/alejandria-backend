@@ -54,7 +54,7 @@ class UsuarioViewSet(viewsets.ModelViewSet):
         nombre = request.data.get('nombre')
         apellido = request.data.get('apellido')
         correo = request.data.get('correo')
-        contrasena = request.data.get('contrasena')
+        password = request.data.get('password')
 
         errores = []
         if not nombre:
@@ -63,8 +63,8 @@ class UsuarioViewSet(viewsets.ModelViewSet):
             errores.append("Complete la casilla apellido")
         if not correo:
             errores.append("Complete la casilla correo")
-        if not contrasena:
-            errores.append("Complete la casilla contrasena")
+        if not password:
+            errores.append("Complete la casilla password")
 
         if errores:
             return Result.Error(errores)

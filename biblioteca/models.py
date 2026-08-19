@@ -49,7 +49,7 @@ class Usuario(models.Model):
     apellido = models.CharField(max_length=100)
     correo = models.EmailField(max_length=150, unique=True)
     telefono = models.CharField(max_length=20, blank=True, null=True)
-    contrasena = models.CharField(max_length=255)
+    password = models.CharField(max_length=255)
 
     class Meta:
         db_table = 'usuarios'
@@ -59,12 +59,12 @@ class Usuario(models.Model):
         # Solo se hashea si la contraseña aún no es un hash válido de Django,
         # así se evita re-hashear (y corromper) contraseñas ya almacenadas.
         # Prefijos de hash reconocidos: pbkdf2_, argon2, bcrypt.
-        if not self.contrasena.startswith(('pbkdf2_', 'argon2', 'bcrypt')):
-            self.contrasena = make_password(self.contrasena)
+        if not self.password.startswith(('pbkdf2_', 'argon2', 'bcrypt')):
+            self.password = make_password(self.password)
         super().save(*args, **kwargs)
 
-    def check_contrasena(self, raw_password):
-        return check_password(raw_password, self.contrasena)
+    def check_password(self, raw_password):
+        return check_password(raw_password, self.password)
 
     def __str__(self):
         return f"{self.nombre} {self.apellido}"

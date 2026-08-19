@@ -20,7 +20,7 @@ class UsuarioAdmin(admin.ModelAdmin):
     list_display = ('nombre', 'apellido', 'correo', 'telefono')
     search_fields = ('nombre', 'apellido', 'correo')
     # No se expone la contraseña (ni en el formulario ni en la lista)
-    exclude = ('contrasena',)
+    exclude = ('password',)
 
 
 @admin.register(Prestamo)

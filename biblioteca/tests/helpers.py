@@ -37,7 +37,7 @@ class BaseAPITest(APITestCase):
         )
 
     def crear_usuario(self, nombre="Juan", apellido="Perez", correo=None,
-                      contrasena="secreto123"):
+                      password="secreto123"):
         global _correo_counter
         if correo is None:
             _correo_counter += 1
@@ -46,7 +46,7 @@ class BaseAPITest(APITestCase):
             nombre=nombre,
             apellido=apellido,
             correo=correo,
-            contrasena=contrasena,
+            password=password,
         )
 
     def crear_prestamo(self, usuario=None, libro=None, fecha_prestamo=None,

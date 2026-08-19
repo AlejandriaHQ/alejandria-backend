@@ -239,7 +239,7 @@ class UsuariosCRUDTests(BaseAPITest):
         response = self.client.post(
             reverse('usuario-list'),
             {'nombre': 'Juan', 'apellido': 'Perez', 'correo': 'juan@test.com',
-             'contrasena': 'clave-secreta-1', 'telefono': '555-1234'},
+             'password': 'clave-secreta-1', 'telefono': '555-1234'},
             format='json',
         )
 
@@ -265,7 +265,7 @@ class UsuariosCRUDTests(BaseAPITest):
         response = self.client.put(
             reverse('usuario-detail', args=[usuario.id_usuario]),
             {'nombre': 'Juan Carlos', 'apellido': 'Perez', 'correo': 'juan@test.com',
-             'contrasena': 'nueva-clave-1', 'telefono': '555-9999'},
+             'password': 'nueva-clave-1', 'telefono': '555-9999'},
             format='json',
         )
 
@@ -273,17 +273,17 @@ class UsuariosCRUDTests(BaseAPITest):
         usuario.refresh_from_db()
         self.assertEqual(usuario.nombre, 'Juan Carlos')
         self.assertEqual(usuario.telefono, '555-9999')
-        self.assertTrue(usuario.check_contrasena('nueva-clave-1'))
+        self.assertTrue(usuario.check_password('nueva-clave-1'))
 
-    def test_actualizar_usuario_sin_contrasena_conserva_clave(self):
+    def test_actualizar_usuario_sin_password_conserva_clave(self):
         usuario = self.crear_usuario(nombre='Juan', apellido='Perez',
                                      correo='juan@test.com',
-                                     contrasena='clave-original')
+                                     password='clave-original')
 
         response = self.client.put(
             reverse('usuario-detail', args=[usuario.id_usuario]),
             {'nombre': 'Juan Carlos', 'apellido': 'Perez', 'correo': 'juan@test.com',
-             'telefono': '555-0000'},  # sin contrasena
+             'telefono': '555-0000'},  # sin password
             format='json',
         )
 
@@ -292,7 +292,7 @@ class UsuariosCRUDTests(BaseAPITest):
         self.assertEqual(usuario.nombre, 'Juan Carlos')
         self.assertEqual(usuario.telefono, '555-0000')
         # La contraseña antigua sigue siendo válida: no se pisó el hash.
-        self.assertTrue(usuario.check_contrasena('clave-original'))
+        self.assertTrue(usuario.check_password('clave-original'))
 
     def test_eliminar_usuario(self):
         usuario = self.crear_usuario(correo='juan@test.com')

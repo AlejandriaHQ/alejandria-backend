@@ -7,9 +7,9 @@ class UsuarioSerializer(serializers.ModelSerializer):
     class Meta:
         model = Usuario
         fields = '__all__'
-        # contrasena es write_only: solo entra por POST/PUT, nunca se devuelve
+        # password es write_only: solo entra por POST/PUT, nunca se devuelve
         extra_kwargs = {
-            'contrasena': {'write_only': True},
+            'password': {'write_only': True},
         }
 
 
@@ -21,10 +21,10 @@ class UsuarioSerializerReg(serializers.ModelSerializer):
 
     class Meta:
         model = Usuario
-        fields = ['id_usuario', 'nombre', 'apellido', 'correo', 'telefono', 'contrasena']
-        # contrasena write_only: se acepta al crear pero no se devuelve en la respuesta
+        fields = ['id_usuario', 'nombre', 'apellido', 'correo', 'telefono', 'password']
+        # password write_only: se acepta al crear pero no se devuelve en la respuesta
         extra_kwargs = {
-            'contrasena': {'write_only': True},
+            'password': {'write_only': True},
         }
 
     def validate_correo(self, value):
@@ -40,11 +40,11 @@ class UsuarioSerializerUpdate(serializers.ModelSerializer):
 
     class Meta:
         model = Usuario
-        fields = ['nombre', 'apellido', 'correo', 'telefono', 'contrasena']
-        # contrasena write_only y opcional: permite actualizar nombre/correo/
+        fields = ['nombre', 'apellido', 'correo', 'telefono', 'password']
+        # password write_only y opcional: permite actualizar nombre/correo/
         # telefono sin reenviar la contraseña. Si se envía, el modelo la hashea.
         extra_kwargs = {
-            'contrasena': {'write_only': True, 'required': False},
+            'password': {'write_only': True, 'required': False},
         }
 
     def validate_correo(self, value):
@@ -61,8 +61,8 @@ class UsuarioSerializerUpdate(serializers.ModelSerializer):
         # Si no se envió nueva contraseña, se quita de validated_data para no
         # pisar el hash existente. Si vino, se deja para que el modelo la
         # hashee en save().
-        if 'contrasena' not in validated_data:
-            validated_data.pop('contrasena', None)
+        if 'password' not in validated_data:
+            validated_data.pop('password', None)
         return super().update(instance, validated_data)
 
 
