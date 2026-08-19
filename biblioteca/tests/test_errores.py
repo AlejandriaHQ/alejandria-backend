@@ -111,6 +111,19 @@ class LibrosErroresTests(BaseAPITest):
 
         self.assert_envelope_error(response)
 
+    def test_cantidad_excede_maximo(self):
+        # F10 pentest: por encima del tope superior (10000) se rechaza con 400.
+        response = self.client.post(
+            reverse('libro-list'),
+            {'titulo': 'Dune', 'autor': 'Frank Herbert', 'isbn': '978-9',
+             'cantidad': 10001, 'id_categoria': self.categoria.id_categoria},
+            format='json',
+        )
+
+        self.assert_envelope_error(response)
+        self.assertEqual(response.data['Mensaje']['cantidad'][0],
+                         'Ensure this value is less than or equal to 10000.')
+
     def test_crear_sin_campos_requeridos(self):
         response = self.client.post(
             reverse('libro-list'),

@@ -1,7 +1,7 @@
 from datetime import date
 from django.db import models
 from django.contrib.auth.hashers import make_password, check_password
-from django.core.validators import MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator
 
 
 # MODELO: Categorias
@@ -25,7 +25,13 @@ class Libro(models.Model):
     titulo = models.CharField(max_length=150)
     autor = models.CharField(max_length=150)
     isbn = models.CharField(max_length=20, unique=True, blank=True, null=True)
-    cantidad = models.IntegerField(default=1, validators=[MinValueValidator(1)])
+    # F10 pentest: tope superior de ejemplares por título. 10000 es generoso
+    # para una biblioteca; por encima de eso es casi con seguridad un error de
+    # captura. El tope inferior (>= 1) evita stock negativo o cero.
+    cantidad = models.IntegerField(
+        default=1,
+        validators=[MinValueValidator(1), MaxValueValidator(10000)],
+    )
     id_categoria = models.ForeignKey(
         Categoria,
         on_delete=models.PROTECT,  # No permite eliminar categoría con libros asociados
