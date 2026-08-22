@@ -1,3 +1,5 @@
+from django.http import request
+
 from .serializersCategorias import CategoriasSerializer, CategoriasSerializerReg, CategoriasSerializerUpdate, CategoriasSerializerDelete
 from rest_framework.decorators import api_view
 from biblioteca.models import Categoria
@@ -8,12 +10,18 @@ from drf_yasg import openapi
 from django.db.models import Q, ProtectedError
 from django.core.paginator import Paginator
 from ..services.response import Result, TryCatch
+from ..services.permissions import IsAdminUser,IsAuthenticated
+from rest_framework.status import HTTP_401_UNAUTHORIZED, HTTP_403_FORBIDDEN
 
 #Categorias Views
 
 
 @api_view(['GET'])
 def categorias_list(request):
+    
+    if not IsAuthenticated(request):
+        return Result.Error("Debes iniciar sesión", status=HTTP_401_UNAUTHORIZED)
+        
     def action_to_execute():
         categorias = Categoria.objects.all()
         serializer = CategoriasSerializerReg(categorias, many=True)
@@ -38,6 +46,10 @@ pk_paramView = openapi.Parameter(
 
 @api_view(['GET'])
 def Categoria_View(request):
+    
+    if not IsAuthenticated().has_permission(request, None):
+         return Result.Error("Debes iniciar sesión", status=HTTP_401_UNAUTHORIZED)
+     
     id = request.GET.get('id_categoria')
     if not id:
         return Result.Error("Complete la casilla del ID de la categoria")
@@ -56,6 +68,9 @@ def Categoria_View(request):
 
 @api_view(['POST'])
 def Categoria_Add(request):
+    if not IsAdminUser().has_permission(request,None):
+        return Result.Error("No tienes permisos para realizar esta acción", status=HTTP_403_FORBIDDEN)
+    
     errores = []
 
     nombre = request.data.get('nombre')
@@ -83,6 +98,10 @@ def Categoria_Add(request):
 
 @api_view(['PUT'])
 def Categoria_Update(request):
+    
+    if not IsAdminUser().has_permission(request,None):
+        return Result.Error("No tienes permisos para realizar esta acción", status=HTTP_403_FORBIDDEN)
+    
     errores = []
 
     pk = request.data.get('id_categoria')
@@ -119,6 +138,9 @@ def Categoria_Update(request):
 
 @api_view(['DELETE'])
 def Categoria_Delete(request):
+    if not IsAdminUser().has_permission(request,None):
+        return Result.Error("No tienes permisos para realizar esta acción", status=HTTP_403_FORBIDDEN)
+    
     pk = request.GET.get('id_categoria')
     if not pk:
         return Result.Error("Complete la casilla del ID de la categoria")
@@ -158,7 +180,11 @@ filter_paramView = openapi.Parameter(
     responses={200: 'Exitoso', 400: 'Error'})
 
 @api_view(['GET'])
+       
 def Categoria_Paginators(request):
+    if not IsAuthenticated().has_permission(request, None):
+        return Result.Error("Debes iniciar sesión", status=HTTP_401_UNAUTHORIZED)
+
     page = request.GET.get('page')
     pagesize = 10
     filter = request.GET.get('filter')

@@ -2,18 +2,23 @@ from .serializersLibros import LibroSerializer, LibroSerializerReg, LibroSeriali
 from rest_framework.decorators import api_view
 from biblioteca.models import Libro
 from rest_framework.response import Response
-from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED
+from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED, HTTP_403_FORBIDDEN
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from django.db.models import Q, ProtectedError
 from django.core.paginator import Paginator
 from ..services.response import Result, TryCatch
+from ..services.permissions import IsAdminUser,IsAuthenticated
+from rest_framework.status import HTTP_401_UNAUTHORIZED, HTTP_403_FORBIDDEN
+
 
 #Libros Views
 
-
 @api_view(['GET'])
 def libros_list(request):
+    if not IsAuthenticated().has_permission(request, None):
+        return Result.Error("Debes iniciar sesión", status=HTTP_401_UNAUTHORIZED)
+    
     def action_to_execute():
         libros = Libro.objects.all()
         serializer = LibroSerializerReg(libros, many=True)
@@ -33,6 +38,9 @@ pk_paramView = openapi.Parameter(
 
 @api_view(['GET'])
 def Libro_View(request):
+    if not IsAuthenticated().has_permission(request, None):
+        return Result.Error("Debes iniciar sesión", status=HTTP_401_UNAUTHORIZED)
+    
     id = request.GET.get('id_libro')
     if not id:
         return Result.Error("Complete la casilla del ID del libro")
@@ -51,6 +59,9 @@ def Libro_View(request):
 
 @api_view(['POST'])
 def Libro_Add(request):
+    if not IsAuthenticated().has_permission(request, None):
+        return Result.Error("Debes iniciar sesión", status=HTTP_401_UNAUTHORIZED)
+
     titulo = request.data.get('titulo')
     autor = request.data.get('autor')
     id_categoria = request.data.get('id_categoria')
@@ -84,6 +95,9 @@ def Libro_Add(request):
 
 @api_view(['PUT'])
 def Libro_Update(request):
+    if not IsAuthenticated().has_permission(request, None):
+        return Result.Error("Debes iniciar sesión", status=HTTP_401_UNAUTHORIZED)
+    
     pk = request.data.get('id_libro')
 
     titulo = request.data.get('titulo')
@@ -137,6 +151,9 @@ pk_paramView = openapi.Parameter(
 @api_view(['DELETE'])
 def Libro_Delete(request):
 
+    if not IsAuthenticated().has_permission(request, None):
+        return Result.Error("Debes iniciar sesión", status=HTTP_401_UNAUTHORIZED)
+
     pk = request.GET.get('id_libro')
     if not pk:
         return Result.Error("Complete la casilla del ID del libro")
@@ -177,6 +194,9 @@ filter_paramView = openapi.Parameter(
 
 @api_view(['GET'])
 def Libro_Paginators(request):
+    if not IsAuthenticated().has_permission(request, None):
+        return Result.Error("Debes iniciar sesión", status=HTTP_401_UNAUTHORIZED)
+    
     page = request.GET.get('page')
     pagesize = 10
     filter = request.GET.get('filter')

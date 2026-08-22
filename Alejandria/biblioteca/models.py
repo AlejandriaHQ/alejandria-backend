@@ -89,6 +89,9 @@ class Prestamo(models.Model):
         choices=ESTADOS,
         default=ESTADO_PRESTADO
     )
+    
+    devuelto = models.BooleanField(default=False)
+    fecha_devolucion_real = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = 'prestamos'

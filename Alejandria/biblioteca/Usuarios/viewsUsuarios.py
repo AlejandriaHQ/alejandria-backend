@@ -1,5 +1,5 @@
 from .serializersUsuarios import UsuarioSerializer, UsuarioSerializerReg, UsuarioSerializerUpdate, UsuarioSerializerDelete
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
 from biblioteca.models import Usuario
 from rest_framework.response import Response
 from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED
@@ -8,6 +8,10 @@ from drf_yasg import openapi
 from django.db.models import Q, ProtectedError
 from django.core.paginator import Paginator
 from ..services.response import Result, TryCatch
+from rest_framework.permissions import AllowAny
+from rest_framework_simplejwt.tokens import RefreshToken
+from django.contrib.auth import authenticate
+
 
 #Usuarios Views
 
@@ -224,3 +228,78 @@ def Usuario_Paginators(request):
     serialdata = UsuarioSerializer(page_obj, many=True)
 
     return Result.ResponsePaginator('', serialdata.data, total_pages, page, button_previous, button_next)
+
+@api_view(['POST'])
+
+@permission_classes([AllowAny])
+def login_view(request):
+    correo = request.data.get('correo')
+    contrasena = request.data.get('contrasena')
+
+    if not correo or not contrasena:
+        return Result.Error("Complete los campos de correo y contraseña")
+
+    user = authenticate(request, correo=correo, password=contrasena)
+
+    if not user:
+        return Result.Error("Correo o contraseña incorrectos")
+    
+    refresh = RefreshToken.for_user(user)
+    return Response({
+        'refresh': str(refresh),
+        'access': str(refresh.access_token),
+        'user': {
+            'id': user.id,
+            'username': user.username,
+            'correo': user.correo,
+            'is_staff': user.is_staff,
+        }
+    }, status=HTTP_200_OK)
+    
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def usuario_registro(request):
+    from .serializersUsuarios import UsuarioSerializerReg
+    serializer = UsuarioSerializerReg(data=request.data)
+    
+    if not serializer.is_valid():
+        return Result.Error(serializer.errors)
+    
+    user = serializer.save()
+    refresh = RefreshToken.for_user(user)
+    
+    return Response({
+        'refresh': str(refresh),
+        'access': str(refresh.access_token),
+        'user': {
+            'id': user.id,
+            'username': user.username,
+            'correo': user.correo,
+            'is_staff': user.is_staff,
+        }
+    }, status=HTTP_200_OK)
+    
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def usuario_logout(request):
+    from .serializersUsuarios import UsuarioSerializerReg
+    
+    serializer = UsuarioSerializerReg(data=request.data)
+    
+    if not serializer.is_valid():
+        return Result.Error(serializer.errors)
+    
+    user = serializer.save()
+    refresh = RefreshToken.for_user(user)
+    
+    return Response({
+        'refresh': str(refresh),
+        'access': str(refresh.access_token),
+        'user': {
+            'id': user.id,
+            'username': user.username,
+            'correo': user.correo,
+            'is_staff': user.is_staff,
+        }
+    }, status=HTTP_201_CREATED)
+    
