@@ -53,6 +53,7 @@ urlpatterns = [
     path('biblioteca/', include('biblioteca.libros.urls')),
     path('biblioteca/', include('biblioteca.usuarios.urls')),
     path('biblioteca/', include('biblioteca.prestamos.urls')),
+    path('biblioteca/', include('biblioteca.reportes.urls')),
 
     # Autenticación JWT: /token/ acepta email O identifier + password
     # (CustomTokenObtainPairSerializer) y devuelve access con claim 'role';
