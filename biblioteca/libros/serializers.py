@@ -1,7 +1,24 @@
+import re
+
 from rest_framework import serializers
 from ..models import Libro
 
 #Libro Serializer
+
+# Validación de formato ISBN (RN-09): se acepta un ISBN-10 (9 dígitos + un
+# dígito o 'X'/'x' de control) o un ISBN-13 (13 dígitos). Se toleran guiones y
+# espacios (formato legible habitual) porque se limpian antes de validar.
+# Decisión: validación de FORMATO, no de checksum: el checksum real (algoritmo
+# de Luhn/GB/T) descarta ISBNs históricos correctos y complica la captura.
+_ISBN_REGEX = re.compile(r'^(?:\d{13}|\d{9}[\dXx])$')
+
+
+def _validar_formato_isbn(value):
+    """Rechaza un ISBN que no sea formato ISBN-10 o ISBN-13 (RN-09)."""
+    valor_limpio = value.replace('-', '').replace(' ', '')
+    if not _ISBN_REGEX.match(valor_limpio):
+        raise serializers.ValidationError("El ISBN no tiene un formato válido")
+
 
 class LibroSerializer(serializers.ModelSerializer):
     # Campos computados de solo lectura (RF-09): cuántos ejemplares están
@@ -34,10 +51,13 @@ class LibroSerializerReg(serializers.ModelSerializer):
                   'anio', 'editorial', 'descripcion', 'portada']
 
     def validate_isbn(self, value):
-        # Mensaje claro en lugar del genérico "Complete los campos vacios":
-        # detecta el duplicado de ISBN antes de que DRF/la BD lo rechace.
-        if value and Libro.objects.filter(isbn=value).exists():
-            raise serializers.ValidationError("Ya existe un libro con ese ISBN")
+        # Formato (RN-09) y duplicado con mensaje claro en lugar del genérico
+        # "Complete los campos vacios": detecta el duplicado de ISBN antes de
+        # que DRF/la BD lo rechace.
+        if value:
+            _validar_formato_isbn(value)
+            if Libro.objects.filter(isbn=value).exists():
+                raise serializers.ValidationError("Ya existe un libro con ese ISBN")
         return value
 
 
@@ -51,9 +71,10 @@ class LibroSerializerUpdate(serializers.ModelSerializer):
                   'anio', 'editorial', 'descripcion', 'portada', 'activo']
 
     def validate_isbn(self, value):
-        # En update se excluye el propio registro para que reenviar el mismo
-        # ISBN no se considere duplicado.
+        # Formato (RN-09) y duplicado. En update se excluye el propio
+        # registro para que reenviar el mismo ISBN no se considere duplicado.
         if value:
+            _validar_formato_isbn(value)
             qs = Libro.objects.filter(isbn=value)
             if self.instance is not None:
                 qs = qs.exclude(pk=self.instance.pk)

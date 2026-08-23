@@ -84,11 +84,11 @@ class LibrosErroresTests(BaseAPITest):
         self.categoria = self.crear_categoria(nombre='Ficción')
 
     def test_isbn_duplicado(self):
-        self.crear_libro(titulo='Dune', isbn='978-1', categoria=self.categoria)
+        self.crear_libro(titulo='Dune', isbn='9780306406157', categoria=self.categoria)
 
         response = self.client.post(
             reverse('libro-list'),
-            {'titulo': 'Otro libro', 'autor': 'Otro autor', 'isbn': '978-1',
+            {'titulo': 'Otro libro', 'autor': 'Otro autor', 'isbn': '9780306406157',
              'id_categoria': self.categoria.id_categoria},
             format='json',
         )
@@ -101,7 +101,7 @@ class LibrosErroresTests(BaseAPITest):
     def test_cantidad_cero(self):
         response = self.client.post(
             reverse('libro-list'),
-            {'titulo': 'Dune', 'autor': 'Frank Herbert', 'isbn': '978-2',
+            {'titulo': 'Dune', 'autor': 'Frank Herbert', 'isbn': '9780451524935',
              'cantidad': 0, 'id_categoria': self.categoria.id_categoria},
             format='json',
         )
@@ -111,7 +111,7 @@ class LibrosErroresTests(BaseAPITest):
     def test_cantidad_negativa(self):
         response = self.client.post(
             reverse('libro-list'),
-            {'titulo': 'Dune', 'autor': 'Frank Herbert', 'isbn': '978-3',
+            {'titulo': 'Dune', 'autor': 'Frank Herbert', 'isbn': '9780743273565',
              'cantidad': -3, 'id_categoria': self.categoria.id_categoria},
             format='json',
         )
@@ -122,7 +122,7 @@ class LibrosErroresTests(BaseAPITest):
         # F10 pentest: por encima del tope superior (10000) se rechaza con 400.
         response = self.client.post(
             reverse('libro-list'),
-            {'titulo': 'Dune', 'autor': 'Frank Herbert', 'isbn': '978-9',
+            {'titulo': 'Dune', 'autor': 'Frank Herbert', 'isbn': '9780060935467',
              'cantidad': 10001, 'id_categoria': self.categoria.id_categoria},
             format='json',
         )

@@ -141,7 +141,7 @@ class LibrosCRUDTests(BaseAPITest):
     def test_crear_libro(self):
         response = self.client.post(
             reverse('libro-list'),
-            {'titulo': 'Dune', 'autor': 'Frank Herbert', 'isbn': '978-3',
+            {'titulo': 'Dune', 'autor': 'Frank Herbert', 'isbn': '9780306406157',
              'cantidad': 4, 'id_categoria': self.categoria.id_categoria},
             format='json',
         )
@@ -156,7 +156,7 @@ class LibrosCRUDTests(BaseAPITest):
     def test_crear_libro_sin_cantidad_usa_default(self):
         response = self.client.post(
             reverse('libro-list'),
-            {'titulo': 'Dune', 'autor': 'Frank Herbert', 'isbn': '978-4',
+            {'titulo': 'Dune', 'autor': 'Frank Herbert', 'isbn': '9783161484100',
              'id_categoria': self.categoria.id_categoria},
             format='json',
         )
@@ -180,7 +180,7 @@ class LibrosCRUDTests(BaseAPITest):
         response = self.client.put(
             reverse('libro-detail', args=[libro.id_libro]),
             {'titulo': 'Dune 2', 'autor': 'Frank Herbert',
-             'isbn': '978-6', 'cantidad': 7, 'id_categoria': self.categoria.id_categoria},
+             'isbn': '9780132350884', 'cantidad': 7, 'id_categoria': self.categoria.id_categoria},
             format='json',
         )
 
