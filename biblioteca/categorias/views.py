@@ -7,7 +7,7 @@ from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 
-from ..models import Categoria
+from ..models import Categoria, Libro
 from ..services.response import Result
 from .serializers import (
     CategoriasSerializer,
@@ -55,7 +55,7 @@ class CategoriaViewSet(viewsets.ModelViewSet):
         description="Obtener la lista de categorías",
         responses={200: OpenApiTypes.OBJECT})
     def list(self, request):
-        categorias = Categoria.objects.all()
+        categorias = Categoria.objects.filter(activo=True)
         serializer = CategoriasSerializerReg(categorias, many=True)
         return Result.Exitosa("Lista de categorías obtenida correctamente", serializer.data)
 
@@ -141,6 +141,20 @@ class CategoriaViewSet(viewsets.ModelViewSet):
         if not categoria:
             return Result.Error("Registro no encontrado", 404)
 
+        # Eliminación lógica (RN-07 / RF-10): si la categoría tiene libros
+        # asociados no se borra físicamente (PROTECT); se desactiva para no
+        # romper la FK de los libros que la referencian.
+        tiene_libros = Libro.objects.filter(id_categoria=categoria).exists()
+        if tiene_libros:
+            categoria.activo = False
+            categoria.save(update_fields=['activo'])
+            return Result.Exitosa(
+                "La categoría tiene libros asociados, por lo que se desactivó en lugar de eliminarse",
+                {},
+                HTTP_200_OK,
+            )
+
+        # Sin libros: se puede eliminar físicamente.
         try:
             categoria.delete()
         except ProtectedError:
@@ -162,9 +176,9 @@ class CategoriaViewSet(viewsets.ModelViewSet):
             query = Q(nombre__icontains=filter) | \
                     Q(descripcion__icontains=filter)
 
-            cont = Categoria.objects.filter(query).order_by('id_categoria')
+            cont = Categoria.objects.filter(activo=True).filter(query).order_by('id_categoria')
         else:
-            cont = Categoria.objects.all().order_by('id_categoria')
+            cont = Categoria.objects.filter(activo=True).order_by('id_categoria')
 
         paginator = Paginator(cont, pagesize)
         total_pages = paginator.num_pages

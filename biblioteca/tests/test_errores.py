@@ -16,7 +16,7 @@ from rest_framework.status import (
     HTTP_404_NOT_FOUND,
 )
 
-from biblioteca.models import Prestamo, Usuario
+from biblioteca.models import Categoria, Prestamo, Usuario
 from biblioteca.tests.helpers import BaseAPITest
 
 
@@ -60,14 +60,20 @@ class CategoriasErroresTests(BaseAPITest):
         self.assert_envelope_error(response)
 
     def test_eliminar_categoria_con_libros_asociados(self):
-        # ProtectedError: no se puede eliminar una categoría con libros.
+        # RN-07 / RF-10: una categoría con libros asociados NO se elimina
+        # físicamente (la FK de Libro usa PROTECT); se desactiva mediante
+        # eliminación lógica para conservar los libros que la referencian.
         categoria = self.crear_categoria(nombre='Ficción')
         self.crear_libro(titulo='Dune', isbn='978-1', categoria=categoria)
 
         response = self.client.delete(
             reverse('categoria-detail', args=[categoria.id_categoria]))
 
-        self.assert_envelope_error(response)
+        self.assert_envelope_exitosa(response)
+        categoria.refresh_from_db()
+        self.assertFalse(categoria.activo)
+        # La categoría sigue existiendo en la BD (no se borró físicamente).
+        self.assertTrue(Categoria.objects.filter(pk=categoria.pk).exists())
 
 
 class LibrosErroresTests(BaseAPITest):

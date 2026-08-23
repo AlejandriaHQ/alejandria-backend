@@ -7,7 +7,7 @@ from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 
-from ..models import Libro
+from ..models import Libro, Prestamo
 from ..services.response import Result
 from .serializers import (
     LibroSerializer,
@@ -62,7 +62,7 @@ class LibroViewSet(viewsets.ModelViewSet):
         description="Obtener la lista de libros",
         responses={200: OpenApiTypes.OBJECT})
     def list(self, request):
-        libros = Libro.objects.all()
+        libros = Libro.objects.filter(activo=True)
         serializer = LibroSerializerReg(libros, many=True)
         return Result.Exitosa("Lista de libros obtenida correctamente", serializer.data)
 
@@ -159,6 +159,21 @@ class LibroViewSet(viewsets.ModelViewSet):
         if not libro:
             return Result.Error("Registro no encontrado", 404)
 
+        # Eliminación lógica (RN-06 / RF-07): si el libro tiene préstamos
+        # asociados (en curso o historial) no se borra físicamente: el FK de
+        # Prestamo usa PROTECT y además se pierde el historial. Se desactiva
+        # para que deje de aparecer en el catálogo público.
+        tiene_prestamos = Prestamo.objects.filter(id_libro=libro).exists()
+        if tiene_prestamos:
+            libro.activo = False
+            libro.save(update_fields=['activo'])
+            return Result.Exitosa(
+                "El libro tiene préstamos asociados, por lo que se desactivó en lugar de eliminarse",
+                {},
+                HTTP_200_OK,
+            )
+
+        # Sin préstamos: se puede eliminar físicamente.
         try:
             libro.delete()
         except ProtectedError:
@@ -174,12 +189,15 @@ class LibroViewSet(viewsets.ModelViewSet):
     def paginar(self, request):
         """Paginación con búsqueda combinable (RF-08).
 
+        Solo se listan libros activos (``activo=True``): los desactivados
+        por eliminación lógica no aparecen en el catálogo público (RN-06).
+
         Filtros de la lista (se combinan con AND entre sí; dentro de ``filter``
         se combinan con OR):
         - ``filter``   : cadena opcional que busca por icontains en titulo,
                          autor e isbn (OR entre los tres campos).
         - ``categoria``: id opcional de categoría, filtra por id_categoria (exacto).
-        - Si no se pasa ningún filtro se devuelven todos los libros.
+        - Si no se pasa ningún filtro se devuelven todos los libros activos.
         La paginación es de 10 elementos por página y devuelve el envelope
         con maxPages/currentpage/previous/next.
         """
@@ -203,10 +221,10 @@ class LibroViewSet(viewsets.ModelViewSet):
                     return Result.Error("El parámetro categoria debe ser un número entero")
                 query &= Q(id_categoria=categoria)
 
-            cont = Libro.objects.filter(query).order_by('id_libro')
+            cont = Libro.objects.filter(activo=True).filter(query).order_by('id_libro')
 
         else:
-            cont = Libro.objects.all().order_by('id_libro')
+            cont = Libro.objects.filter(activo=True).order_by('id_libro')
 
         paginator = Paginator(cont, pagesize)
         total_pages = paginator.num_pages

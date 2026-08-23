@@ -4,8 +4,9 @@ from .models import Categoria, Libro, Usuario, Prestamo
 
 @admin.register(Categoria)
 class CategoriaAdmin(admin.ModelAdmin):
-    list_display = ('nombre', 'descripcion')
+    list_display = ('nombre', 'descripcion', 'activo')
     search_fields = ('nombre', 'descripcion')
+    list_filter = ('activo',)
 
 
 @admin.register(Libro)

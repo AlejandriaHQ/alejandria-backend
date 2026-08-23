@@ -12,13 +12,13 @@ class CategoriasSerializer(serializers.ModelSerializer):
 class CategoriasSerializerReg(serializers.ModelSerializer):
     class Meta:
         model = Categoria
-        fields = ['id_categoria', 'nombre', 'descripcion']
+        fields = ['id_categoria', 'nombre', 'descripcion', 'activo']
 
 
 class CategoriasSerializerUpdate(serializers.ModelSerializer):
     class Meta:
         model = Categoria
-        fields = ['nombre', 'descripcion']
+        fields = ['nombre', 'descripcion', 'activo']
 
 
 class CategoriasSerializerDelete(serializers.ModelSerializer):

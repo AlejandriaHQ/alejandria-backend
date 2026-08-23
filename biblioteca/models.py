@@ -10,6 +10,9 @@ class Categoria(models.Model):
     id_categoria = models.AutoField(primary_key=True)
     nombre = models.CharField(max_length=100)
     descripcion = models.CharField(max_length=255, blank=True, null=True)
+    # Eliminación lógica (RN-07 / RF-10): una categoría con libros no se borra
+    # físicamente (PROTECT); se desactiva para no romper los libros asociados.
+    activo = models.BooleanField(default=True)
 
     class Meta:
         db_table = 'categorias'
