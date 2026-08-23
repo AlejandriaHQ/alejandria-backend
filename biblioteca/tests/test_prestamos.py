@@ -167,6 +167,50 @@ class PrestamosReglasStockTests(BaseAPITest):
         self.assertEqual(self.libro.cantidad, 5)
 
 
+class PrestamosMaximoSimultaneosTests(BaseAPITest):
+    """RN-02 / RF-20: máximo 3 ejemplares simultáneos por usuario."""
+
+    def setUp(self):
+        super().setUp()
+        self.usuario = self.crear_usuario(email='juan@test.com')
+        self.libros = [
+            self.crear_libro(titulo=f'Libro {i}', isbn=f'978-{i}', cantidad=5)
+            for i in range(1, 5)
+        ]
+        self.hoy = date.today()
+
+    def _prestar(self, libro):
+        return self.client.post(
+            reverse('prestamo-list'),
+            {'id_usuario': self.usuario.id,
+             'id_libro': libro.id_libro,
+             'fecha_prestamo': self.hoy.isoformat()},
+            format='json',
+        )
+
+    def test_permite_hasta_3_ejemplares_simultaneos(self):
+        # Tres préstamos activos (uno por libro, con stock de sobra) es válido.
+        for libro in self.libros[:3]:
+            self.assert_envelope_exitosa(self._prestar(libro), 201)
+        self.assertEqual(Prestamo.objects.count(), 3)
+        self.assertEqual(
+            Prestamo.objects.filter(id_usuario=self.usuario, estado__in=['Prestado', 'Atrasado']).count(),
+            3,
+        )
+
+    def test_rechaza_el_cuarto_ejemplar_simultaneo(self):
+        for libro in self.libros[:3]:
+            self.assert_envelope_exitosa(self._prestar(libro), 201)
+
+        response = self._prestar(self.libros[3])
+
+        self.assert_envelope_error(response, HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data['Mensaje'],
+                         'El usuario ya tiene el máximo de 3 ejemplares prestados')
+        # El cuarto préstamo rechazado no se registró.
+        self.assertEqual(Prestamo.objects.count(), 3)
+
+
 class PrestamosTransicionAtrasadoTests(BaseAPITest):
     """Transición automática Prestado -> Atrasado."""
 

@@ -62,6 +62,12 @@ def _normalizar_atrasados():
     ).update(estado='Atrasado')
 
 
+# RN-02 / RF-20: número máximo de ejemplares prestados simultáneamente a un
+# mismo socio. Se cuenta sobre préstamos ACTIVOS (Prestado o Atrasado): los
+# devueltos no ocupan cuota.
+MAX_PRESTAMOS_SIMULTANEOS = 3
+
+
 @extend_schema(tags=['prestamos'])
 class PrestamoViewSet(viewsets.ModelViewSet):
     queryset = Prestamo.objects.all()
@@ -113,6 +119,16 @@ class PrestamoViewSet(viewsets.ModelViewSet):
 
                     if libro.disponibles() <= 0:
                         return Result.Error("No hay ejemplares disponibles de este libro", 400)
+
+                    # RN-02 / RF-20: máximo de 3 ejemplares simultáneos por usuario.
+                    # Se cuentan los préstamos ACTIVOS (Prestado/Atrasado); los
+                    # devueltos no ocupan cuota.
+                    activos = Prestamo.objects.filter(
+                        id_usuario_id=id_usuario,
+                        estado__in=['Prestado', 'Atrasado'],
+                    ).count()
+                    if activos >= MAX_PRESTAMOS_SIMULTANEOS:
+                        return Result.Error("El usuario ya tiene el máximo de 3 ejemplares prestados", 400)
 
                     serialData.save()
             except IntegrityError:
