@@ -44,6 +44,13 @@ filter_paramView = OpenApiParameter(
     description="Filter",
 )
 
+categoria_paramView = OpenApiParameter(
+    'categoria',
+    OpenApiTypes.INT,
+    OpenApiParameter.QUERY,
+    description="ID de categoría para filtrar libros",
+)
+
 
 @extend_schema(tags=['libros'])
 class LibroViewSet(viewsets.ModelViewSet):
@@ -161,18 +168,40 @@ class LibroViewSet(viewsets.ModelViewSet):
 
     @extend_schema(
         description="Buscar",
-        parameters=[page_paramView, filter_paramView],
+        parameters=[page_paramView, filter_paramView, categoria_paramView],
         responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT})
     @action(detail=False, methods=['get'], url_path='paginar')
     def paginar(self, request):
+        """Paginación con búsqueda combinable (RF-08).
+
+        Filtros de la lista (se combinan con AND entre sí; dentro de ``filter``
+        se combinan con OR):
+        - ``filter``   : cadena opcional que busca por icontains en titulo,
+                         autor e isbn (OR entre los tres campos).
+        - ``categoria``: id opcional de categoría, filtra por id_categoria (exacto).
+        - Si no se pasa ningún filtro se devuelven todos los libros.
+        La paginación es de 10 elementos por página y devuelve el envelope
+        con maxPages/currentpage/previous/next.
+        """
         page = request.GET.get('page')
         pagesize = 10
         filter = request.GET.get('filter')
+        categoria = request.GET.get('categoria')
 
-        if filter:
-            query = Q(titulo__icontains=filter) | \
-                    Q(autor__icontains=filter) | \
-                    Q(isbn__icontains=filter)
+        if filter or categoria:
+            query = Q()
+
+            if filter:
+                query |= Q(titulo__icontains=filter) | \
+                         Q(autor__icontains=filter) | \
+                         Q(isbn__icontains=filter)
+
+            if categoria:
+                try:
+                    categoria = int(categoria)
+                except (ValueError, TypeError):
+                    return Result.Error("El parámetro categoria debe ser un número entero")
+                query &= Q(id_categoria=categoria)
 
             cont = Libro.objects.filter(query).order_by('id_libro')
 
