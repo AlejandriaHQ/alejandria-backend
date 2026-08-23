@@ -2,7 +2,7 @@ from datetime import date
 
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
-from django.db.models import Q, ProtectedError, F
+from django.db.models import Q, ProtectedError
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED
@@ -101,24 +101,25 @@ class PrestamoViewSet(viewsets.ModelViewSet):
 
         if serialData.is_valid():
             try:
-                # Regla de stock: se valida disponibilidad y se decrementa el stock
-                # de forma atómica dentro de una transacción (select_for_update
-                # bloquea la fila del libro para evitar condiciones de carrera).
+                # Regla de stock (DECISIÓN (b)): `cantidad` es el STOCK TOTAL
+                # (fijo) del libro y NUNCA cambia al prestar/devolver. La
+                # disponibilidad se DERIVA de los préstamos activos:
+                # disponibles = cantidad - prestados(). Por eso aquí solo se
+                # valida la disponibilidad real dentro de una transacción
+                # atómica (select_for_update bloquea la fila del libro para
+                # evitar condiciones de carrera) y NO se decrementa cantidad.
                 with transaction.atomic():
                     libro = Libro.objects.select_for_update().get(pk=id_libro)
 
-                    if libro.cantidad < 1:
+                    if libro.disponibles() <= 0:
                         return Result.Error("No hay ejemplares disponibles de este libro", 400)
 
                     serialData.save()
-                    # Decremento atómico del stock al prestar (nunca baja de 0
-                    # porque ya se validó cantidad >= 1 dentro de la transacción).
-                    Libro.objects.filter(pk=id_libro).update(cantidad=F('cantidad') - 1)
             except IntegrityError:
                 return Result.Error("Ya existe un registro con ese valor único", 400)
         else:
             # Se devuelven los errores del serializer (p. ej. fecha de préstamo
-            # fuera de rango F12) en lugar del mensaje genérico y engañoso;
+            # fuera de rango) en lugar del mensaje genérico y engañoso;
             # mismo patrón que libros y usuarios.
             return Result.Error(serialData.errors)
 
@@ -166,29 +167,22 @@ class PrestamoViewSet(viewsets.ModelViewSet):
         if not prestamo:
             return Result.Error("Registro no encontrado", 404)
 
-        # Estado previo para decidir el ajuste de stock tras la actualización
-        estado_anterior = prestamo.estado
-
         serialData = PrestamoSerializerUpdate(instance=prestamo, data=request.data)
 
         if serialData.is_valid():
             try:
                 with transaction.atomic():
                     serialData.save()
-                    # Regla de stock según el cambio de estado:
-                    #  - Pasa a Devuelto (antes no lo era): el ejemplar vuelve al stock.
-                    #  - Deja de estar Devuelto: el ejemplar vuelve a estar prestado,
-                    #    se decrementa (con guard para no bajar de 0).
-                    nuevo_estado = prestamo.estado  # tras save() el instance ya refleja el nuevo valor
-                    if estado_anterior != 'Devuelto' and nuevo_estado == 'Devuelto':
-                        Libro.objects.filter(pk=prestamo.id_libro_id).update(cantidad=F('cantidad') + 1)
-                    elif estado_anterior == 'Devuelto' and nuevo_estado != 'Devuelto':
-                        Libro.objects.filter(pk=prestamo.id_libro_id, cantidad__gt=0).update(cantidad=F('cantidad') - 1)
+                    # Regla de stock (DECISIÓN (b)): NO se ajusta `cantidad` al
+                    # actualizar. La disponibilidad se deriva de los préstamos
+                    # activos (prestados()), por lo que al pasar a Devuelto el
+                    # ejemplar vuelve a estar disponible automáticamente (el
+                    # contador prestados() deja de incluirlo), sin tocar stock.
             except IntegrityError:
                 return Result.Error("Ya existe un registro con ese valor único", 400)
         else:
             # Se devuelven los errores del serializer (p. ej. fecha de préstamo
-            # fuera de rango F12) en lugar del mensaje genérico y engañoso;
+            # fuera de rango) en lugar del mensaje genérico y engañoso;
             # mismo patrón que libros y usuarios.
             return Result.Error(serialData.errors)
 
@@ -206,11 +200,10 @@ class PrestamoViewSet(viewsets.ModelViewSet):
         if not prestamo:
             return Result.Error("Registro no encontrado", 404)
 
-        # Regla de stock: si el préstamo aún no estaba devuelto (Prestado/Atrasado),
-        # el ejemplar estaba fuera del stock, por lo que al eliminar se devuelve.
-        if prestamo.estado != 'Devuelto':
-            Libro.objects.filter(pk=prestamo.id_libro_id).update(cantidad=F('cantidad') + 1)
-
+        # Regla de stock (DECISIÓN (b)): NO se ajusta `cantidad` al eliminar.
+        # Al borrar un préstamo activo (Prestado/Atrasado) el contador
+        # prestados() deja de incluirlo, por lo que la disponibilidad se
+        # recupera automáticamente sin tocar el stock total.
         try:
             prestamo.delete()
         except ProtectedError:

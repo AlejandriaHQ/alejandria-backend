@@ -1,9 +1,10 @@
 """Cobertura de las reglas de negocio de Prestamos.
 
-Verifica el manejo de stock: decremento al prestar, rechazo cuando no hay
-ejemplares, restauración al devolver y al eliminar un préstamo no devuelto,
-y la transición automática Prestado -> Atrasado cuando la fecha de
-devolución ya venció.
+Verifica el manejo de stock (decisión (b): ``cantidad`` es el stock total
+fijo y la disponibilidad se deriva de ``prestados()`` — no se decrementa al
+prestar), el rechazo por falta de disponibilidad, la restitución de la
+disponibilidad al devolver o eliminar un préstamo no devuelto, y la
+transición automática Prestado -> Atrasado cuando el vencimiento ya pasó.
 """
 from datetime import date, timedelta
 
@@ -15,7 +16,14 @@ from biblioteca.tests.helpers import BaseAPITest
 
 
 class PrestamosReglasStockTests(BaseAPITest):
-    """Reglas de negocio de stock en préstamos."""
+    """Reglas de negocio de stock en préstamos (DECISIÓN (b)).
+
+    ``cantidad`` es el stock TOTAL (fijo) del libro y NUNCA cambia al
+    prestar/devolver. La disponibilidad se deriva de los préstamos activos:
+    disponibles = cantidad - prestados(). El stock físico no se decrementa al
+    prestar, porque contar en ``prestados()`` Y además decrementar ``cantidad``
+    sería doble conteo.
+    """
 
     def setUp(self):
         super().setUp()
@@ -33,35 +41,51 @@ class PrestamosReglasStockTests(BaseAPITest):
             payload['fecha_devolucion'] = fecha_devolucion.isoformat()
         return self.client.post(reverse('prestamo-list'), payload, format='json')
 
-    def test_prestar_decrementa_stock(self):
+    def test_prestar_no_decrementa_stock_total_sino_disponibilidad(self):
         response = self.crear_prestamo_via_api(fecha_devolucion=self.hoy + timedelta(days=7))
 
         self.assert_envelope_exitosa(response, 201)
         self.libro.refresh_from_db()
-        self.assertEqual(self.libro.cantidad, 4)
+        self.assertEqual(self.libro.cantidad, 5)        # stock total NO cambia
+        self.assertEqual(self.libro.disponibles(), 4)   # un ejemplar queda fuera
 
-    def test_no_prestar_sin_stock(self):
-        # Primer préstamo: stock 5 -> 4 -> 3 -> 2 -> 1 -> 0.
-        for _ in range(5):
-            self.assert_envelope_exitosa(self.crear_prestamo_via_api(), 201)
-        self.libro.refresh_from_db()
-        self.assertEqual(self.libro.cantidad, 0)
+    def test_no_prestar_sin_disponibilidad(self):
+        # RN-03: un solo ejemplar. El primer préstamo deja disponibilidad 0 y
+        # el segundo debe rechazarse, sin doble conteo de stock (cantidad).
+        librito = self.crear_libro(titulo='Dune 2', isbn='978-2', cantidad=1)
+        respuesta = self.client.post(
+            reverse('prestamo-list'),
+            {'id_usuario': self.usuario.id,
+             'id_libro': librito.id_libro,
+             'fecha_prestamo': self.hoy.isoformat()},
+            format='json',
+        )
+        self.assert_envelope_exitosa(respuesta, 201)
+        librito.refresh_from_db()
+        self.assertEqual(librito.disponibles(), 0)
 
-        response = self.crear_prestamo_via_api()
+        response = self.client.post(
+            reverse('prestamo-list'),
+            {'id_usuario': self.usuario.id,
+             'id_libro': librito.id_libro,
+             'fecha_prestamo': self.hoy.isoformat()},
+            format='json',
+        )
 
         self.assert_envelope_error(response, HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data['Mensaje'],
                          'No hay ejemplares disponibles de este libro')
-        # El préstamo rechazado no se registró.
-        self.assertEqual(Prestamo.objects.count(), 5)
-        self.libro.refresh_from_db()
-        self.assertEqual(self.libro.cantidad, 0)
+        # El préstamo rechazado no se registró y la disponibilidad sigue en 0.
+        self.assertEqual(Prestamo.objects.filter(id_libro=librito).count(), 1)
+        librito.refresh_from_db()
+        self.assertEqual(librito.disponibles(), 0)
+        self.assertEqual(librito.cantidad, 1)  # stock total intacto
 
-    def test_devolucion_restaura_stock(self):
+    def test_devolucion_recupera_disponibilidad(self):
         response = self.crear_prestamo_via_api(fecha_devolucion=self.hoy + timedelta(days=7))
         prestamo_id = response.data['datos']['id_prestamo']
         self.libro.refresh_from_db()
-        self.assertEqual(self.libro.cantidad, 4)
+        self.assertEqual(self.libro.disponibles(), 4)
 
         response = self.client.put(
             reverse('prestamo-detail', args=[prestamo_id]),
@@ -76,28 +100,30 @@ class PrestamosReglasStockTests(BaseAPITest):
         self.assert_envelope_exitosa(response)
         self.assertEqual(response.data['datos']['estado'], Prestamo.ESTADO_DEVUELTO)
         self.libro.refresh_from_db()
-        self.assertEqual(self.libro.cantidad, 5)
+        self.assertEqual(self.libro.disponibles(), 5)
+        self.assertEqual(self.libro.cantidad, 5)  # stock total intacto
 
-    def test_eliminar_prestamo_no_devuelto_restaura_stock(self):
+    def test_eliminar_prestamo_no_devuelto_recupera_disponibilidad(self):
         response = self.crear_prestamo_via_api(fecha_devolucion=self.hoy + timedelta(days=7))
         prestamo_id = response.data['datos']['id_prestamo']
         self.libro.refresh_from_db()
-        self.assertEqual(self.libro.cantidad, 4)
+        self.assertEqual(self.libro.disponibles(), 4)
 
         response = self.client.delete(
             reverse('prestamo-detail', args=[prestamo_id]))
 
         self.assert_envelope_exitosa(response)
         self.libro.refresh_from_db()
+        self.assertEqual(self.libro.disponibles(), 5)
         self.assertEqual(self.libro.cantidad, 5)
 
-    def test_eliminar_prestamo_devuelto_no_restaura_dos_veces(self):
+    def test_eliminar_prestamo_devuelto_no_recupera_dos_veces(self):
         response = self.crear_prestamo_via_api(fecha_devolucion=self.hoy + timedelta(days=7))
         prestamo_id = response.data['datos']['id_prestamo']
         self.libro.refresh_from_db()
-        self.assertEqual(self.libro.cantidad, 4)
+        self.assertEqual(self.libro.disponibles(), 4)
 
-        # Devolver: el stock vuelve a 5.
+        # Devolver: la disponibilidad vuelve a 5.
         self.client.put(
             reverse('prestamo-detail', args=[prestamo_id]),
             {'id_usuario': self.usuario.id,
@@ -108,22 +134,23 @@ class PrestamosReglasStockTests(BaseAPITest):
             format='json',
         )
         self.libro.refresh_from_db()
-        self.assertEqual(self.libro.cantidad, 5)
+        self.assertEqual(self.libro.disponibles(), 5)
 
-        # Eliminar un préstamo ya devuelto no debe incrementar el stock otra vez.
+        # Eliminar un préstamo ya devuelto no debe recuperar otra vez.
         response = self.client.delete(
             reverse('prestamo-detail', args=[prestamo_id]))
         self.assert_envelope_exitosa(response)
         self.libro.refresh_from_db()
+        self.assertEqual(self.libro.disponibles(), 5)
         self.assertEqual(self.libro.cantidad, 5)
 
-    def test_actualizar_prestamo_sin_cambiar_a_devuelto_no_afecta_stock(self):
+    def test_actualizar_prestamo_sin_cambiar_a_devuelto_no_afecta_disponibilidad(self):
         response = self.crear_prestamo_via_api(fecha_devolucion=self.hoy + timedelta(days=7))
         prestamo_id = response.data['datos']['id_prestamo']
         self.libro.refresh_from_db()
-        self.assertEqual(self.libro.cantidad, 4)
+        self.assertEqual(self.libro.disponibles(), 4)
 
-        # Actualización sin cambiar el estado: el stock no debe moverse.
+        # Actualización sin cambiar el estado: la disponibilidad no se mueve.
         response = self.client.put(
             reverse('prestamo-detail', args=[prestamo_id]),
             {'id_usuario': self.usuario.id,
@@ -136,7 +163,8 @@ class PrestamosReglasStockTests(BaseAPITest):
 
         self.assert_envelope_exitosa(response)
         self.libro.refresh_from_db()
-        self.assertEqual(self.libro.cantidad, 4)
+        self.assertEqual(self.libro.disponibles(), 4)
+        self.assertEqual(self.libro.cantidad, 5)
 
 
 class PrestamosTransicionAtrasadoTests(BaseAPITest):
@@ -238,8 +266,10 @@ class PrestamosTransicionAtrasadoTests(BaseAPITest):
         self.assertEqual(Prestamo.objects.filter(pk=prestamo.pk).count(), 0)
 
     def test_eliminar_prestamo_atrasado_restaura_stock(self):
-        # Un préstamo vencido (Atrasado) mantiene el ejemplar fuera del stock;
-        # al eliminarlo, el stock debe restituirse.
+        # Un préstamo vencido (Atrasado) mantiene el ejemplar fuera de la
+        # disponibilidad (prestados() lo incluye); al eliminarlo, la
+        # disponibilidad debe restituirse. El stock total (cantidad) NO cambia
+        # (decisión (b)).
         prestamo = self.crear_prestamo(
             usuario=self.usuario,
             libro=self.libro,
@@ -247,11 +277,10 @@ class PrestamosTransicionAtrasadoTests(BaseAPITest):
             fecha_devolucion=self.hoy - timedelta(days=5),
             estado=Prestamo.ESTADO_PRESTADO,
         )
-        # Simula el estado de stock que deja un préstamo activo.
-        self.libro.cantidad -= 1
-        self.libro.save(update_fields=['cantidad'])
+        # Un ejemplar queda fuera del catálogo por el préstamo activo.
         self.libro.refresh_from_db()
-        self.assertEqual(self.libro.cantidad, 4)
+        self.assertEqual(self.libro.cantidad, 5)
+        self.assertEqual(self.libro.disponibles(), 4)
 
         # La transición a Atrasado ocurre al consultar.
         self.client.get(reverse('prestamo-list'))
@@ -263,4 +292,5 @@ class PrestamosTransicionAtrasadoTests(BaseAPITest):
 
         self.assert_envelope_exitosa(response)
         self.libro.refresh_from_db()
+        self.assertEqual(self.libro.disponibles(), 5)
         self.assertEqual(self.libro.cantidad, 5)
