@@ -9,7 +9,7 @@ transición automática Prestado -> Atrasado cuando el vencimiento ya pasó.
 from datetime import date, timedelta
 
 from django.urls import reverse
-from rest_framework.status import HTTP_400_BAD_REQUEST
+from rest_framework.status import HTTP_400_BAD_REQUEST, HTTP_403_FORBIDDEN
 
 from biblioteca.models import Prestamo
 from biblioteca.tests.helpers import BaseAPITest
@@ -261,6 +261,74 @@ class PrestamosBloqueoVencidosTests(BaseAPITest):
             reverse('prestamo-list'),
             {'id_usuario': self.usuario.id,
              'id_libro': self.libro_nuevo.id_libro,
+             'fecha_prestamo': self.hoy.isoformat()},
+            format='json',
+        )
+
+        self.assert_envelope_exitosa(response, 201)
+
+
+class PrestamosPermisosTests(BaseAPITest):
+    """RN-05 / RFC-25: solo los administradores registran préstamos/devoluciones."""
+
+    def setUp(self):
+        super().setUp()
+        self.usuario = self.crear_usuario(email='juan@test.com')
+        self.admin = self.crear_usuario(email='admin@test.com', role='admin')
+        self.libro = self.crear_libro(titulo='Dune', isbn='978-1', cantidad=5)
+        self.hoy = date.today()
+
+    def test_usuario_comun_no_puede_crear_prestamo(self):
+        self.autenticar_como(self.usuario)
+        response = self.client.post(
+            reverse('prestamo-list'),
+            {'id_usuario': self.usuario.id,
+             'id_libro': self.libro.id_libro,
+             'fecha_prestamo': self.hoy.isoformat()},
+            format='json',
+        )
+
+        self.assert_envelope_error(response, HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data['Mensaje'],
+                         'No tiene permisos para realizar esta acción')
+        self.assertEqual(Prestamo.objects.count(), 0)
+
+    def test_usuario_comun_no_puede_devolver_ni_eliminar(self):
+        prestamo = self.crear_prestamo(usuario=self.usuario, libro=self.libro)
+        self.autenticar_como(self.usuario)
+
+        # Devolución (update) rechazada.
+        r = self.client.put(
+            reverse('prestamo-detail', args=[prestamo.id_prestamo]),
+            {'id_usuario': self.usuario.id,
+             'id_libro': self.libro.id_libro,
+             'fecha_prestamo': self.hoy.isoformat(),
+             'estado': Prestamo.ESTADO_DEVUELTO},
+            format='json',
+        )
+        self.assert_envelope_error(r, HTTP_403_FORBIDDEN)
+
+        # Eliminación rechazada.
+        r2 = self.client.delete(reverse('prestamo-detail', args=[prestamo.id_prestamo]))
+        self.assert_envelope_error(r2, HTTP_403_FORBIDDEN)
+        self.assertEqual(Prestamo.objects.count(), 1)
+
+    def test_usuario_comun_si_puede_leer(self):
+        # RN-05: la lectura (list) queda abierta a cualquier usuario autenticado.
+        self.crear_prestamo(usuario=self.usuario, libro=self.libro)
+        self.autenticar_como(self.usuario)
+
+        response = self.client.get(reverse('prestamo-list'))
+
+        self.assert_envelope_exitosa(response)
+        self.assertEqual(len(response.data['datos']), 1)
+
+    def test_admin_puede_crear(self):
+        self.autenticar_como(self.admin)
+        response = self.client.post(
+            reverse('prestamo-list'),
+            {'id_usuario': self.usuario.id,
+             'id_libro': self.libro.id_libro,
              'fecha_prestamo': self.hoy.isoformat()},
             format='json',
         )

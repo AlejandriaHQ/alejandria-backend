@@ -5,7 +5,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import Q, ProtectedError
 from rest_framework import viewsets
 from rest_framework.decorators import action
-from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED
+from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED, HTTP_403_FORBIDDEN
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 
@@ -30,6 +30,21 @@ def _obtener_o_none(queryset, pk):
         return queryset.filter(pk=pk).first()
     except (ValueError, TypeError):
         return None
+
+
+# PROTECCIÓN DE ESCRITURA (roles) — RN-05 / RFC-25: solo un usuario con
+# role='admin' (o is_staff) puede REGISTRAR préstamos y devoluciones
+# (create/update/destroy). La lectura (list/retrieve/paginar) queda abierta a
+# cualquier usuario autenticado (IsAuthenticated global en settings), y las
+# acciones historial/vencidos tienen su propia regla de acceso.
+# Se implementa con LÓGICA EN LA VISTA (y no con permission_classes de DRF)
+# para mantener el envelope JSON {success, Mensaje, datos} consistente:
+# PermissionDenied lanzaría un 403 con el body por defecto de DRF, fuera del
+# contrato que consume el frontend. La comprobación es role=='admin' OR
+# is_staff, igual que en Usuarios: así los superusuarios de Django también
+# registran préstamos sin depender de su campo role.
+def _permiso_escritura_prestamos(request):
+    return request.user.role == 'admin' or request.user.is_staff
 
 
 page_paramView = OpenApiParameter(
@@ -86,8 +101,12 @@ class PrestamoViewSet(viewsets.ModelViewSet):
     @extend_schema(
         description='Añade un nuevo prestamo.',
         request=PrestamoSerializerReg,
-        responses={201: PrestamoSerializerReg, 400: OpenApiTypes.OBJECT})
+        responses={201: PrestamoSerializerReg, 400: OpenApiTypes.OBJECT, 403: OpenApiTypes.OBJECT})
     def create(self, request):
+        # RN-05 / RFC-25: solo un administrador puede registrar préstamos.
+        if not _permiso_escritura_prestamos(request):
+            return Result.Error("No tiene permisos para realizar esta acción", HTTP_403_FORBIDDEN)
+
         id_usuario = request.data.get('id_usuario')
         id_libro = request.data.get('id_libro')
         fecha_prestamo = request.data.get('fecha_prestamo')
@@ -163,8 +182,13 @@ class PrestamoViewSet(viewsets.ModelViewSet):
     @extend_schema(
         description="Actualiza un prestamo.",
         request=PrestamoSerializerUpdate,
-        responses={200: PrestamoSerializerUpdate, 400: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT})
+        responses={200: PrestamoSerializerUpdate, 400: OpenApiTypes.OBJECT, 403: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT})
     def update(self, request, pk=None):
+        # RN-05 / RFC-25: solo un administrador puede actualizar (incluída la
+        # devolución) un préstamo.
+        if not _permiso_escritura_prestamos(request):
+            return Result.Error("No tiene permisos para realizar esta acción", HTTP_403_FORBIDDEN)
+
         # Transición automática Prestado -> Atrasado: se aplica también en update
         # para que un préstamo vencido muestre su estado consistente tras editarse.
         _normalizar_atrasados()
@@ -213,8 +237,12 @@ class PrestamoViewSet(viewsets.ModelViewSet):
 
     @extend_schema(
         description="Eliminar un prestamo",
-        responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT})
+        responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT, 403: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT})
     def destroy(self, request, pk=None):
+        # RN-05 / RFC-25: solo un administrador puede eliminar préstamos.
+        if not _permiso_escritura_prestamos(request):
+            return Result.Error("No tiene permisos para realizar esta acción", HTTP_403_FORBIDDEN)
+
         # Transición automática Prestado -> Atrasado: se aplica también en delete
         # para mantener el estado consistente antes de eliminar.
         _normalizar_atrasados()
