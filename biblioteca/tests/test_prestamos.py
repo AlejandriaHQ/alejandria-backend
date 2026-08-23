@@ -336,6 +336,64 @@ class PrestamosPermisosTests(BaseAPITest):
         self.assert_envelope_exitosa(response, 201)
 
 
+class PrestamosDevolucionTests(BaseAPITest):
+    """RF-22 / CU-12: registrar la fecha real de devolución y marcar si fue vencido."""
+
+    def setUp(self):
+        super().setUp()
+        self.usuario = self.crear_usuario(email='juan@test.com')
+        self.libro = self.crear_libro(titulo='Dune', isbn='978-1', cantidad=5)
+        self.hoy = date.today()
+
+    def _devolver(self, prestamo, fecha_prestamo, fecha_devolucion):
+        # El admin autenticado (setUp base) registra la devolución (RN-05).
+        return self.client.put(
+            reverse('prestamo-detail', args=[prestamo.id_prestamo]),
+            {'id_usuario': self.usuario.id,
+             'id_libro': self.libro.id_libro,
+             'fecha_prestamo': fecha_prestamo.isoformat(),
+             'fecha_devolucion': fecha_devolucion.isoformat(),
+             'estado': Prestamo.ESTADO_DEVUELTO},
+            format='json',
+        )
+
+    def test_devolucion_en_plazo_guarda_fecha_real_y_no_vencido(self):
+        # Vencimiento = fecha_prestamo + 7 = hoy + 4 (en el futuro): no está vencido.
+        fecha_prestamo = self.hoy - timedelta(days=3)
+        fecha_devolucion = self.hoy + timedelta(days=4)
+        prestamo = self.crear_prestamo(
+            usuario=self.usuario, libro=self.libro,
+            fecha_prestamo=fecha_prestamo, fecha_devolucion=fecha_devolucion,
+            estado=Prestamo.ESTADO_PRESTADO,
+        )
+
+        response = self._devolver(prestamo, fecha_prestamo, fecha_devolucion)
+
+        self.assert_envelope_exitosa(response)
+        prestamo.refresh_from_db()
+        self.assertEqual(prestamo.estado, Prestamo.ESTADO_DEVUELTO)
+        self.assertEqual(prestamo.fecha_devolucion_real, self.hoy)
+        self.assertFalse(prestamo.devuelto_vencido)
+
+    def test_devolucion_vencida_marca_devuelto_vencido(self):
+        # Préstamo vencido (Atrasado) que se devuelve tarde: se marca el flag.
+        fecha_prestamo = self.hoy - timedelta(days=15)
+        fecha_devolucion = self.hoy - timedelta(days=10)  # límite del préstamo
+        prestamo = self.crear_prestamo(
+            usuario=self.usuario, libro=self.libro,
+            fecha_prestamo=fecha_prestamo, fecha_devolucion=fecha_devolucion,
+            estado=Prestamo.ESTADO_PRESTADO,
+        )
+
+        response = self._devolver(prestamo, fecha_prestamo, fecha_devolucion)
+
+        self.assert_envelope_exitosa(response)
+        prestamo.refresh_from_db()
+        self.assertEqual(prestamo.estado, Prestamo.ESTADO_DEVUELTO)
+        self.assertEqual(prestamo.fecha_devolucion_real, self.hoy)
+        self.assertTrue(prestamo.devuelto_vencido)
+
+
 class PrestamosTransicionAtrasadoTests(BaseAPITest):
     """Transición automática Prestado -> Atrasado."""
 

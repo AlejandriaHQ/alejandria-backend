@@ -203,6 +203,12 @@ class Prestamo(models.Model):
     # superar la fecha_vencimiento (7 días). Si el cliente no la envía, el
     # vencimiento normativo es fecha_vencimiento.
     fecha_devolucion = models.DateField(blank=True, null=True)
+    # Fecha REAL en que el préstamo fue devuelto (RF-22 / CU-12). Solo se
+    # rellena al pasar el préstamo a estado Devuelto (la registra el admin).
+    fecha_devolucion_real = models.DateField(blank=True, null=True)
+    # Flag que indica si el préstamo se devolvió DESPUÉS de su vencimiento
+    # (RF-22). Sin multa en esta etapa: solo se informa para el historial.
+    devuelto_vencido = models.BooleanField(default=False)
     estado = models.CharField(
         max_length=20,
         choices=ESTADOS,

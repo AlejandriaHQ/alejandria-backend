@@ -32,9 +32,10 @@ class PrestamoSerializerReg(serializers.ModelSerializer):
         model = Prestamo
         fields = [
             'id_prestamo', 'id_usuario', 'id_libro', 'fecha_prestamo',
-            'fecha_vencimiento', 'fecha_devolucion', 'estado',
+            'fecha_vencimiento', 'fecha_devolucion', 'fecha_devolucion_real',
+            'devuelto_vencido', 'estado',
         ]
-        read_only_fields = ['id_prestamo', 'fecha_vencimiento']
+        read_only_fields = ['id_prestamo', 'fecha_vencimiento', 'fecha_devolucion_real', 'devuelto_vencido']
 
     def validate(self, attrs):
         return self._validar_fechas(attrs)
@@ -70,14 +71,16 @@ class PrestamoSerializerUpdate(serializers.ModelSerializer):
 
     - ``fecha_vencimiento`` read_only: se recalcula en ``update()`` cuando
       cambia ``fecha_prestamo`` (RN-01).
+    - ``fecha_devolucion_real`` y ``devuelto_vencido`` se gestionan en
+      ``update()`` al pasar el préstamo a ``Devuelto`` (RF-22 / CU-12).
     """
     class Meta:
         model = Prestamo
         fields = [
             'id_usuario', 'id_libro', 'fecha_prestamo', 'fecha_vencimiento',
-            'fecha_devolucion', 'estado',
+            'fecha_devolucion', 'fecha_devolucion_real', 'devuelto_vencido', 'estado',
         ]
-        read_only_fields = ['fecha_vencimiento']
+        read_only_fields = ['fecha_vencimiento', 'fecha_devolucion_real', 'devuelto_vencido']
 
     def validate(self, attrs):
         return self._validar_fechas(attrs)
@@ -102,6 +105,18 @@ class PrestamoSerializerUpdate(serializers.ModelSerializer):
             validated_data['fecha_vencimiento'] = (
                 validated_data['fecha_prestamo'] + timedelta(days=_DIAS_PRESTAMO)
             )
+        # RF-22 / CU-12: al pasar a Devuelto se registra la fecha real de
+        # devolución y se marca si fue vencido (sin multa: solo un flag).
+        nuevo_estado = validated_data.get('estado', instance.estado)
+        if nuevo_estado == Prestamo.ESTADO_DEVUELTO:
+            if instance.estado != Prestamo.ESTADO_DEVUELTO:
+                vencimiento = validated_data.get('fecha_vencimiento') or instance.fecha_vencimiento
+                validated_data['fecha_devolucion_real'] = date.today()
+                validated_data['devuelto_vencido'] = bool(vencimiento and date.today() > vencimiento)
+        elif instance.estado == Prestamo.ESTADO_DEVUELTO:
+            # Se deja de estar devuelto: se limpian los marcadores de devolución.
+            validated_data['fecha_devolucion_real'] = None
+            validated_data['devuelto_vencido'] = False
         return super().update(instance, validated_data)
 
 
