@@ -308,3 +308,52 @@ class PrestamoViewSet(viewsets.ModelViewSet):
         serialdata = PrestamoSerializer(page_obj, many=True)
 
         return Result.ResponsePaginator('', serialdata.data, total_pages, page, button_previous, button_next)
+
+    @extend_schema(
+        description="Historial del socio (RF-24 / CU-14).",
+        parameters=[
+            OpenApiParameter('usuario', OpenApiTypes.INT, OpenApiParameter.QUERY, description="ID del usuario"),
+            OpenApiParameter('estado', OpenApiTypes.STR, OpenApiParameter.QUERY, description="Filtrar por estado"),
+        ],
+        responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT, 403: OpenApiTypes.OBJECT})
+    @action(detail=False, methods=['get'], url_path='historial')
+    def historial(self, request):
+        # RF-24 / CU-14: historial de préstamos de un socio. Un usuario con
+        # role='user' solo puede ver SU propio historial; un admin
+        # (role=='admin' o is_staff) puede ver el de cualquier socio. La
+        # lectura respeta el envelope y el acceso por rol ya definido.
+        _normalizar_atrasados()
+        es_admin = _permiso_escritura_prestamos(request)
+        usuario_id = request.GET.get('usuario')
+        if not es_admin:
+            # Usuario normal: se ignora el parámetro y se fuerza su propio id.
+            usuario_id = request.user.pk
+        if not usuario_id:
+            return Result.Error("Debe indicar el usuario")
+        try:
+            usuario_id = int(usuario_id)
+        except (ValueError, TypeError):
+            return Result.Error("El parámetro usuario debe ser un número entero")
+
+        qs = Prestamo.objects.filter(id_usuario_id=usuario_id)
+        estado = request.GET.get('estado')
+        if estado:
+            qs = qs.filter(estado=estado)
+        qs = qs.order_by('-fecha_prestamo')
+        serializer = PrestamoSerializer(qs, many=True)
+        return Result.Exitosa("Historial de préstamos", serializer.data)
+
+    @extend_schema(
+        description="Listar préstamos vencidos (RF-23 / CU-13). Solo administradores.",
+        responses={200: OpenApiTypes.OBJECT, 403: OpenApiTypes.OBJECT})
+    @action(detail=False, methods=['get'], url_path='vencidos')
+    def vencidos(self, request):
+        # RF-23 / CU-13: listar préstamos vencidos. Acción de solo lectura pero
+        # expone deuda de socios: solo la ejecuta un administrador.
+        if not _permiso_escritura_prestamos(request):
+            return Result.Error("No tiene permisos para realizar esta acción", HTTP_403_FORBIDDEN)
+
+        _normalizar_atrasados()
+        qs = Prestamo.objects.filter(estado='Atrasado').order_by('fecha_vencimiento')
+        serializer = PrestamoSerializer(qs, many=True)
+        return Result.Exitosa("Préstamos vencidos", serializer.data)

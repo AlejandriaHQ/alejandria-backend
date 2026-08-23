@@ -521,3 +521,79 @@ class PrestamosTransicionAtrasadoTests(BaseAPITest):
         self.libro.refresh_from_db()
         self.assertEqual(self.libro.disponibles(), 5)
         self.assertEqual(self.libro.cantidad, 5)
+
+
+class PrestamosHistorialVencidosTests(BaseAPITest):
+    """Cobertura de las acciones historial (RF-24 / CU-14) y vencidos (RF-23 / CU-13)."""
+
+    def setUp(self):
+        super().setUp()
+        self.usuario_a = self.crear_usuario(email='a@test.com')
+        self.usuario_b = self.crear_usuario(email='b@test.com')
+        self.libro = self.crear_libro(titulo='Fundacion', isbn='978-2', cantidad=5)
+
+    def test_historial_admin_ve_prestamos_de_otro_usuario(self):
+        # El admin (por defecto en setUp) puede consultar el historial de
+        # cualquier socio.
+        self.crear_prestamo(usuario=self.usuario_a, libro=self.libro)
+        response = self.client.get(
+            reverse('prestamo-historial'), {'usuario': self.usuario_a.id})
+
+        self.assert_envelope_exitosa(response)
+        datos = response.data['datos']
+        self.assertEqual(len(datos), 1)
+        self.assertEqual(datos[0]['id_usuario'], self.usuario_a.id)
+
+    def test_historial_usuario_normal_solo_ve_suyo(self):
+        # Un usuario normal solo ve su propio historial: el parámetro
+        # 'usuario' se ignora y se fuerza su propio id.
+        self.crear_prestamo(usuario=self.usuario_a, libro=self.libro)
+        self.crear_prestamo(usuario=self.usuario_b, libro=self.libro)
+
+        self.autenticar_como(self.usuario_a)
+        # Pide el historial de usuario_b, pero debe ver solo el suyo.
+        response = self.client.get(
+            reverse('prestamo-historial'), {'usuario': self.usuario_b.id})
+
+        self.assert_envelope_exitosa(response)
+        datos = response.data['datos']
+        self.assertEqual(len(datos), 1)
+        self.assertEqual(datos[0]['id_usuario'], self.usuario_a.id)
+
+    def test_historial_filtra_por_estado(self):
+        self.crear_prestamo(
+            usuario=self.usuario_a, libro=self.libro,
+            estado=Prestamo.ESTADO_DEVUELTO)
+        self.crear_prestamo(usuario=self.usuario_a, libro=self.libro)
+
+        response = self.client.get(
+            reverse('prestamo-historial'),
+            {'usuario': self.usuario_a.id, 'estado': Prestamo.ESTADO_DEVUELTO})
+
+        self.assert_envelope_exitosa(response)
+        datos = response.data['datos']
+        self.assertEqual(len(datos), 1)
+        self.assertEqual(datos[0]['estado'], Prestamo.ESTADO_DEVUELTO)
+
+    def test_vencidos_admin_lista_atrasados(self):
+        prestamo_atrasado = self.crear_prestamo(
+            usuario=self.usuario_a, libro=self.libro,
+            fecha_prestamo=date.today() - timedelta(days=10),
+            fecha_devolucion=date.today() - timedelta(days=5),
+            estado=Prestamo.ESTADO_PRESTADO)
+        # Normalización en la acción marca como Atrasado.
+        self.crear_prestamo(usuario=self.usuario_b, libro=self.libro,
+                            estado=Prestamo.ESTADO_DEVUELTO)
+
+        response = self.client.get(reverse('prestamo-vencidos'))
+
+        self.assert_envelope_exitosa(response)
+        datos = response.data['datos']
+        self.assertEqual(len(datos), 1)
+        self.assertEqual(datos[0]['id_prestamo'], prestamo_atrasado.id_prestamo)
+
+    def test_vencidos_usuario_normal_403(self):
+        self.autenticar_como(self.usuario_a)
+        response = self.client.get(reverse('prestamo-vencidos'))
+        self.assertEqual(response.status_code, HTTP_403_FORBIDDEN)
+        self.assertFalse(response.data['success'])
