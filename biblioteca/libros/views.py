@@ -3,7 +3,7 @@ from django.db import IntegrityError
 from django.db.models import Q, ProtectedError
 from rest_framework import viewsets
 from rest_framework.decorators import action
-from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED
+from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED, HTTP_403_FORBIDDEN
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 
@@ -52,6 +52,10 @@ categoria_paramView = OpenApiParameter(
 )
 
 
+def _permiso_escritura_catalogo(request):
+    return request.user.role == 'admin' or request.user.is_staff
+
+
 @extend_schema(tags=['libros'])
 class LibroViewSet(viewsets.ModelViewSet):
     queryset = Libro.objects.all()
@@ -69,8 +73,12 @@ class LibroViewSet(viewsets.ModelViewSet):
     @extend_schema(
         description='Añade un nuevo libro.',
         request=LibroSerializerReg,
-        responses={201: LibroSerializerReg, 400: OpenApiTypes.OBJECT})
+        responses={201: LibroSerializerReg, 400: OpenApiTypes.OBJECT, 403: OpenApiTypes.OBJECT})
     def create(self, request):
+        # RN-05 / RFC-25: solo un administrador puede registrar libros.
+        if not _permiso_escritura_catalogo(request):
+            return Result.Error("No tiene permisos para realizar esta acción", HTTP_403_FORBIDDEN)
+
         titulo = request.data.get('titulo')
         autor = request.data.get('autor')
         id_categoria = request.data.get('id_categoria')
@@ -116,6 +124,10 @@ class LibroViewSet(viewsets.ModelViewSet):
         request=LibroSerializerUpdate,
         responses={200: LibroSerializerUpdate, 400: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT})
     def update(self, request, pk=None):
+        # RN-05 / RFC-25: solo un administrador puede actualizar un libro.
+        if not _permiso_escritura_catalogo(request):
+            return Result.Error("No tiene permisos para realizar esta acción", HTTP_403_FORBIDDEN)
+
         titulo = request.data.get('titulo')
         autor = request.data.get('autor')
         id_categoria = request.data.get('id_categoria')
@@ -155,6 +167,10 @@ class LibroViewSet(viewsets.ModelViewSet):
         description="Eliminar un libro",
         responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT})
     def destroy(self, request, pk=None):
+        # RN-05 / RFC-25: solo un administrador puede eliminar libros.
+        if not _permiso_escritura_catalogo(request):
+            return Result.Error("No tiene permisos para realizar esta acción", HTTP_403_FORBIDDEN)
+
         libro = _obtener_o_none(Libro.objects, pk)
         if not libro:
             return Result.Error("Registro no encontrado", 404)

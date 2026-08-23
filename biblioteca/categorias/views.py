@@ -3,7 +3,7 @@ from django.db import IntegrityError
 from django.db.models import Q, ProtectedError
 from rest_framework import viewsets
 from rest_framework.decorators import action
-from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED
+from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED, HTTP_403_FORBIDDEN
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 
@@ -45,6 +45,10 @@ filter_paramView = OpenApiParameter(
 )
 
 
+def _permiso_escritura_catalogo(request):
+    return request.user.role == 'admin' or request.user.is_staff
+
+
 @extend_schema(tags=['categorias'])
 class CategoriaViewSet(viewsets.ModelViewSet):
     queryset = Categoria.objects.all()
@@ -62,8 +66,12 @@ class CategoriaViewSet(viewsets.ModelViewSet):
     @extend_schema(
         description='Añade una nueva categoria.',
         request=CategoriasSerializerReg,
-        responses={201: CategoriasSerializerReg, 400: OpenApiTypes.OBJECT})
+        responses={201: CategoriasSerializerReg, 400: OpenApiTypes.OBJECT, 403: OpenApiTypes.OBJECT})
     def create(self, request):
+        # RN-05 / RFC-25: solo un administrador puede registrar categorías.
+        if not _permiso_escritura_catalogo(request):
+            return Result.Error("No tiene permisos para realizar esta acción", HTTP_403_FORBIDDEN)
+
         errores = []
 
         nombre = request.data.get('nombre')
@@ -105,6 +113,10 @@ class CategoriaViewSet(viewsets.ModelViewSet):
         request=CategoriasSerializerUpdate,
         responses={200: CategoriasSerializerUpdate, 400: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT})
     def update(self, request, pk=None):
+        # RN-05 / RFC-25: solo un administrador puede actualizar una categoría.
+        if not _permiso_escritura_catalogo(request):
+            return Result.Error("No tiene permisos para realizar esta acción", HTTP_403_FORBIDDEN)
+
         errores = []
 
         nombre = request.data.get('nombre')
@@ -137,6 +149,10 @@ class CategoriaViewSet(viewsets.ModelViewSet):
         description="Eliminar un Categoria",
         responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT})
     def destroy(self, request, pk=None):
+        # RN-05 / RFC-25: solo un administrador puede eliminar categorías.
+        if not _permiso_escritura_catalogo(request):
+            return Result.Error("No tiene permisos para realizar esta acción", HTTP_403_FORBIDDEN)
+
         categoria = _obtener_o_none(Categoria.objects, pk)
         if not categoria:
             return Result.Error("Registro no encontrado", 404)
