@@ -115,6 +115,13 @@ class PrestamoViewSet(viewsets.ModelViewSet):
                 # atómica (select_for_update bloquea la fila del libro para
                 # evitar condiciones de carrera) y NO se decrementa cantidad.
                 with transaction.atomic():
+                    # RN-04 / RF-25: bloqueo por préstamos vencidos. Si el socio
+                    # tiene algún préstamo Atrasado (no devuelto), no puede tomar
+                    # nuevos préstamos. Se comprueba como puerta dura antes de
+                    # validar stock y límite de ejemplares.
+                    if Prestamo.objects.filter(id_usuario_id=id_usuario, estado='Atrasado').exists():
+                        return Result.Error("El usuario tiene préstamos vencidos y no puede tomar nuevos préstamos", 400)
+
                     libro = Libro.objects.select_for_update().get(pk=id_libro)
 
                     if libro.disponibles() <= 0:

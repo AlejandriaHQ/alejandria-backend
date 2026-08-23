@@ -211,6 +211,63 @@ class PrestamosMaximoSimultaneosTests(BaseAPITest):
         self.assertEqual(Prestamo.objects.count(), 3)
 
 
+class PrestamosBloqueoVencidosTests(BaseAPITest):
+    """RN-04 / RF-25: bloqueo de nuevos préstamos si hay vencidos sin devolver."""
+
+    def setUp(self):
+        super().setUp()
+        self.usuario = self.crear_usuario(email='juan@test.com')
+        self.libro = self.crear_libro(titulo='Dune', isbn='978-1', cantidad=5)
+        self.libro_nuevo = self.crear_libro(titulo='Otro', isbn='978-2', cantidad=5)
+        self.hoy = date.today()
+
+    def test_bloquea_nuevo_prestamo_si_usuario_tiene_vencido(self):
+        # Un préstamo Atrasado (vencido y no devuelto) del mismo usuario.
+        self.crear_prestamo(
+            usuario=self.usuario,
+            libro=self.libro,
+            fecha_prestamo=self.hoy - timedelta(days=15),
+            fecha_devolucion=self.hoy - timedelta(days=10),
+            estado=Prestamo.ESTADO_ATRASADO,
+        )
+
+        response = self.client.post(
+            reverse('prestamo-list'),
+            {'id_usuario': self.usuario.id,
+             'id_libro': self.libro_nuevo.id_libro,
+             'fecha_prestamo': self.hoy.isoformat()},
+            format='json',
+        )
+
+        self.assert_envelope_error(response, HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data['Mensaje'],
+                         'El usuario tiene préstamos vencidos y no puede tomar nuevos préstamos')
+        # No se registró ningún préstamo nuevo.
+        self.assertEqual(Prestamo.objects.filter(id_usuario=self.usuario).count(), 1)
+
+    def test_si_devuelve_el_vencido_puede_prestar(self):
+        # Devolver el préstamo vencido (estado Devuelto) libera al usuario.
+        vencido = self.crear_prestamo(
+            usuario=self.usuario,
+            libro=self.libro,
+            fecha_prestamo=self.hoy - timedelta(days=15),
+            fecha_devolucion=self.hoy - timedelta(days=10),
+            estado=Prestamo.ESTADO_ATRASADO,
+        )
+        vencido.estado = Prestamo.ESTADO_DEVUELTO
+        vencido.save(update_fields=['estado'])
+
+        response = self.client.post(
+            reverse('prestamo-list'),
+            {'id_usuario': self.usuario.id,
+             'id_libro': self.libro_nuevo.id_libro,
+             'fecha_prestamo': self.hoy.isoformat()},
+            format='json',
+        )
+
+        self.assert_envelope_exitosa(response, 201)
+
+
 class PrestamosTransicionAtrasadoTests(BaseAPITest):
     """Transición automática Prestado -> Atrasado."""
 
