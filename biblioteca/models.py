@@ -172,6 +172,10 @@ class Prestamo(models.Model):
         (ESTADO_ATRASADO, 'Atrasado'),
     ]
 
+    # Duración reglamentaria del préstamo (RN-01 / RF-18): 7 días. La fecha
+    # de vencimiento se autocalcula como fecha_prestamo + DIAS_PRESTAMO.
+    DIAS_PRESTAMO = 7
+
     id_prestamo = models.AutoField(primary_key=True)
     # FK al AUTH_USER_MODEL (Ahora Usuario es AbstractUser). Se mantiene el
     # atributo Python id_usuario con db_column='id_usuario' para no romper el
@@ -189,6 +193,15 @@ class Prestamo(models.Model):
         db_column='id_libro'
     )
     fecha_prestamo = models.DateField()
+    # Fecha reglamentaria de vencimiento (RN-01 / RF-18): fecha_prestamo + 7
+    # días. Se autocalcula en el serializer al crear/actualizar el préstamo
+    # (el cliente no la envía: es el due date normativo). Usada para detectar
+    # préstamos vencidos (Prestado -> Atrasado) y devoluciones vencidas.
+    fecha_vencimiento = models.DateField(blank=True, null=True)
+    # Fecha límite de devolución que el cliente/panel declara como esperada
+    # (compatibilidad con el contrato actual del frontend). Por RN-01 no puede
+    # superar la fecha_vencimiento (7 días). Si el cliente no la envía, el
+    # vencimiento normativo es fecha_vencimiento.
     fecha_devolucion = models.DateField(blank=True, null=True)
     estado = models.CharField(
         max_length=20,
@@ -202,10 +215,13 @@ class Prestamo(models.Model):
 
     def marcar_atrasado_si_aplica(self):
         # Transición automática Prestado -> Atrasado cuando la fecha de
-        # devolución ya venció. NO afecta el stock: solo Prestado -> Devuelto
-        # devuelve ejemplares; un préstamo Atrasado mantiene el ejemplar fuera
-        # del stock hasta que sea devuelto.
-        if self.estado == self.ESTADO_PRESTADO and self.fecha_devolucion and self.fecha_devolucion < date.today():
+        # vencimiento ya pasó. La fecha canónica es fecha_vencimiento; para
+        # registros creados por fuera del serializer (sin fecha_vencimiento)
+        # se cae a fecha_devolucion como límite histórico. NO afecta el stock:
+        # solo Prestado -> Devuelto devuelve ejemplares; un préstamo Atrasado
+        # mantiene el ejemplar fuera del stock hasta que sea devuelto.
+        fecha_limite = self.fecha_vencimiento or self.fecha_devolucion
+        if self.estado == self.ESTADO_PRESTADO and fecha_limite and fecha_limite < date.today():
             self.estado = self.ESTADO_ATRASADO
             self.save(update_fields=['estado'])
 

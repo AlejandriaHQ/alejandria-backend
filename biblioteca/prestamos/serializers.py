@@ -4,30 +4,13 @@ from rest_framework import serializers
 
 from ..models import Prestamo
 
-# F12 pentest: una fecha de préstamo anterior a un año (p.ej. 2025-01-01 con
-# 19 meses de antigüedad) o posterior a un año hacia el futuro es casi con
-# seguridad un error de captura. Una biblioteca puede registrar préstamos con
-# retraso (hasta 1 año) y reservas programadas (hasta 1 año adelante), pero no
-# fechas absurdas.
-_RANGO_FECHA_PRESTAMO = timedelta(days=365)
-
-
-def _validar_rango_fecha_prestamo(fecha_prestamo):
-    """Rechaza fechas de préstamo fuera de un rango razonable (F12 pentest).
-
-    Se aplica solo al valor ENTRANTE (attrs): los registros históricos ya
-    creados no se revalidan al actualizar otros campos.
-    """
-    hoy = date.today()
-    if fecha_prestamo < hoy - _RANGO_FECHA_PRESTAMO:
-        raise serializers.ValidationError({
-            "fecha_prestamo": "La fecha de préstamo no puede ser anterior a un año"
-        })
-    if fecha_prestamo > hoy + _RANGO_FECHA_PRESTAMO:
-        raise serializers.ValidationError({
-            "fecha_prestamo": "La fecha de préstamo no puede ser posterior a un año"
-        })
-    return fecha_prestamo
+# RN-01 / RF-18: la duración máxima de un préstamo es de 7 días. Se descartó
+# la antigua validación de rango ±365 días (F12 pentest sobre el modelo previo
+# de préstamos sin tope): con préstamos de plazo reglamentario fijo, el tope
+# relevante es la DURACIÓN (fecha_devolucion - fecha_prestamo <= 7 días), no un
+# rango absoluto sobre la fecha de préstamo. Un préstamo histórico (antiguo)
+# sigue siendo válido: se vuelve Atrasado cuando su vencimiento pasa.
+_DIAS_PRESTAMO = Prestamo.DIAS_PRESTAMO  # 7
 
 #Prestamo Serializer
 
@@ -38,9 +21,20 @@ class PrestamoSerializer(serializers.ModelSerializer):
 
 
 class PrestamoSerializerReg(serializers.ModelSerializer):
+    """Serializer de CREACIÓN de préstamos (panel admin).
+
+    - ``fecha_vencimiento`` es read_only: se calcula en ``create()`` como
+      ``fecha_prestamo + 7 días`` (RN-01), nunca la envía el cliente.
+    - ``fecha_devolucion`` (esperada) es opcional pero, si llega, no puede ser
+      anterior a fecha_prestamo ni superar los 7 días reglamentarios (RN-01).
+    """
     class Meta:
         model = Prestamo
-        fields = ['id_prestamo', 'id_usuario', 'id_libro', 'fecha_prestamo', 'fecha_devolucion', 'estado']
+        fields = [
+            'id_prestamo', 'id_usuario', 'id_libro', 'fecha_prestamo',
+            'fecha_vencimiento', 'fecha_devolucion', 'estado',
+        ]
+        read_only_fields = ['id_prestamo', 'fecha_vencimiento']
 
     def validate(self, attrs):
         return self._validar_fechas(attrs)
@@ -52,19 +46,38 @@ class PrestamoSerializerReg(serializers.ModelSerializer):
             raise serializers.ValidationError({
                 "fecha_devolucion": "La fecha de devolución no puede ser anterior a la fecha de préstamo"
             })
-        # F12 pentest: la fecha de préstamo entrante debe estar en un rango
-        # razonable (no anterior a un año ni más de un año hacia el futuro).
-        # Solo se valida el valor entrante; los registros históricos no se
-        # revalidan al actualizar otros campos.
-        if 'fecha_prestamo' in attrs and fecha_prestamo:
-            _validar_rango_fecha_prestamo(fecha_prestamo)
+        # RN-01 / RF-18: la duración máxima del préstamo es de 7 días. Si el
+        # cliente declara una fecha_devolucion que excede 7 días desde
+        # fecha_prestamo se rechaza (antes se validaba un rango absoluto ±365).
+        if fecha_devolucion and fecha_prestamo and (fecha_devolucion - fecha_prestamo).days > _DIAS_PRESTAMO:
+            raise serializers.ValidationError({
+                "fecha_devolucion": "La fecha de devolución no puede superar los 7 días reglamentarios de préstamo"
+            })
         return attrs
+
+    def create(self, validated_data):
+        # RN-01: la fecha de vencimiento se calcula como fecha_prestamo + 7 días
+        # en el momento de la creación del préstamo (respeta la reglamentación).
+        validated_data['fecha_vencimiento'] = (
+            validated_data['fecha_prestamo'] + timedelta(days=_DIAS_PRESTAMO)
+        )
+        return super().create(validated_data)
 
 
 class PrestamoSerializerUpdate(serializers.ModelSerializer):
+    """Serializer de ACTUALIZACIÓN de préstamos (panel admin, incluida la
+    devolución).
+
+    - ``fecha_vencimiento`` read_only: se recalcula en ``update()`` cuando
+      cambia ``fecha_prestamo`` (RN-01).
+    """
     class Meta:
         model = Prestamo
-        fields = ['id_usuario', 'id_libro', 'fecha_prestamo', 'fecha_devolucion', 'estado']
+        fields = [
+            'id_usuario', 'id_libro', 'fecha_prestamo', 'fecha_vencimiento',
+            'fecha_devolucion', 'estado',
+        ]
+        read_only_fields = ['fecha_vencimiento']
 
     def validate(self, attrs):
         return self._validar_fechas(attrs)
@@ -76,13 +89,20 @@ class PrestamoSerializerUpdate(serializers.ModelSerializer):
             raise serializers.ValidationError({
                 "fecha_devolucion": "La fecha de devolución no puede ser anterior a la fecha de préstamo"
             })
-        # F12 pentest: la fecha de préstamo entrante debe estar en un rango
-        # razonable (no anterior a un año ni más de un año hacia el futuro).
-        # Solo se valida el valor entrante; los registros históricos no se
-        # revalidan al actualizar otros campos.
-        if 'fecha_prestamo' in attrs and fecha_prestamo:
-            _validar_rango_fecha_prestamo(fecha_prestamo)
+        # RN-01 / RF-18: misma regla de duración máxima de 7 días en update.
+        if fecha_devolucion and fecha_prestamo and (fecha_devolucion - fecha_prestamo).days > _DIAS_PRESTAMO:
+            raise serializers.ValidationError({
+                "fecha_devolucion": "La fecha de devolución no puede superar los 7 días reglamentarios de préstamo"
+            })
         return attrs
+
+    def update(self, instance, validated_data):
+        # RN-01: si cambia la fecha de préstamo se recalcula el vencimiento.
+        if 'fecha_prestamo' in validated_data:
+            validated_data['fecha_vencimiento'] = (
+                validated_data['fecha_prestamo'] + timedelta(days=_DIAS_PRESTAMO)
+            )
+        return super().update(instance, validated_data)
 
 
 class PrestamoSerializerDelete(serializers.ModelSerializer):

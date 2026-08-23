@@ -459,20 +459,22 @@ class PrestamosErroresTests(BaseAPITest):
         self.assert_envelope_error(response)
 
     def test_fecha_prestamo_fuera_de_rango_rechazada(self):
-        # F12 pentest: una fecha de préstamo muy retroactiva (hace más de un
-        # año) o demasiado futura se rechaza con 400 y un mensaje claro.
+        # RN-01 / RF-18: la duración máxima del préstamo es 7 días. Si el
+        # cliente declara una fecha_devolucion que excede 7 días desde
+        # fecha_prestamo se rechaza con 400 y un mensaje claro. Sustituye al
+        # antiguo rango absoluto ±365 (F12) del modelo de préstamos sin tope.
         hoy = date.today()
-        for dias in (-400, 400):
-            response = self.client.post(
-                reverse('prestamo-list'),
-                {'id_usuario': self.usuario.id,
-                 'id_libro': self.libro.id_libro,
-                 'fecha_prestamo': (hoy + timedelta(days=dias)).isoformat()},
-                format='json',
-            )
+        response = self.client.post(
+            reverse('prestamo-list'),
+            {'id_usuario': self.usuario.id,
+             'id_libro': self.libro.id_libro,
+             'fecha_prestamo': hoy.isoformat(),
+             'fecha_devolucion': (hoy + timedelta(days=8)).isoformat()},
+            format='json',
+        )
 
-            self.assert_envelope_error(response)
-            self.assertIn('fecha_prestamo', response.data['Mensaje'])
+        self.assert_envelope_error(response)
+        self.assertIn('fecha_devolucion', response.data['Mensaje'])
 
     def test_view_inexistente(self):
         response = self.client.get(reverse('prestamo-detail', args=[9999]))

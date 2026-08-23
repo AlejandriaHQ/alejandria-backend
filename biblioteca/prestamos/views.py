@@ -49,11 +49,16 @@ filter_paramView = OpenApiParameter(
 
 def _normalizar_atrasados():
     # Transición automática Prestado -> Atrasado: se actualiza en masa antes
-    # de devolver los datos (sin afectar el stock: solo Prestado -> Devuelto
-    # devuelve ejemplares; un préstamo Atrasado mantiene el ejemplar fuera
-    # del stock hasta que sea devuelto).
-    Prestamo.objects.filter(
-        estado='Prestado', fecha_devolucion__lt=date.today()
+    # de devolver los datos. La fecha canónica de vencimiento es
+    # fecha_vencimiento; para registros creados fuera del serializer (sin
+    # fecha_vencimiento) se cae a fecha_devolucion como límite histórico.
+    # NO afecta el stock: solo Prestado -> Devuelto devuelve ejemplares; un
+    # préstamo Atrasado mantiene el ejemplar fuera del stock hasta que se
+    # devuelva.
+    hoy = date.today()
+    Prestamo.objects.filter(estado='Prestado').filter(
+        Q(fecha_vencimiento__isnull=False, fecha_vencimiento__lt=hoy) |
+        Q(fecha_vencimiento__isnull=True, fecha_devolucion__isnull=False, fecha_devolucion__lt=hoy)
     ).update(estado='Atrasado')
 
 

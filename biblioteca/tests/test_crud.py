@@ -423,13 +423,13 @@ class PrestamosCRUDTests(BaseAPITest):
             {'id_usuario': self.usuario.id,
              'id_libro': self.libro.id_libro,
              'fecha_prestamo': hoy.isoformat(),
-             'fecha_devolucion': (hoy + timedelta(days=14)).isoformat()},
+             'fecha_devolucion': (hoy + timedelta(days=7)).isoformat()},
             format='json',
         )
 
         self.assert_envelope_exitosa(response)
         prestamo.refresh_from_db()
-        self.assertEqual(prestamo.fecha_devolucion, hoy + timedelta(days=14))
+        self.assertEqual(prestamo.fecha_devolucion, hoy + timedelta(days=7))
         self.assertEqual(prestamo.estado, Prestamo.ESTADO_PRESTADO)
 
     def test_eliminar_prestamo(self):

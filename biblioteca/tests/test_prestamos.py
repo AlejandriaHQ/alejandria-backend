@@ -129,7 +129,7 @@ class PrestamosReglasStockTests(BaseAPITest):
             {'id_usuario': self.usuario.id,
              'id_libro': self.libro.id_libro,
              'fecha_prestamo': (self.hoy + timedelta(days=1)).isoformat(),
-             'fecha_devolucion': (self.hoy + timedelta(days=10)).isoformat(),
+             'fecha_devolucion': (self.hoy + timedelta(days=8)).isoformat(),
              'estado': Prestamo.ESTADO_PRESTADO},
             format='json',
         )
