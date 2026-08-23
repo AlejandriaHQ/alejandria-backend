@@ -4,9 +4,21 @@ from ..models import Libro
 #Libro Serializer
 
 class LibroSerializer(serializers.ModelSerializer):
+    # Campos computados de solo lectura (RF-09): cuántos ejemplares están
+    # prestados y cuántos están disponibles. Se calculan a partir de los
+    # préstamos activos del libro, no de columnas de la BD.
+    prestados = serializers.SerializerMethodField()
+    disponibles = serializers.SerializerMethodField()
+
     class Meta:
         model = Libro
         fields = '__all__'
+
+    def get_prestados(self, obj):
+        return obj.prestados()
+
+    def get_disponibles(self, obj):
+        return obj.disponibles()
 
 
 class LibroSerializerReg(serializers.ModelSerializer):
@@ -18,7 +30,8 @@ class LibroSerializerReg(serializers.ModelSerializer):
 
     class Meta:
         model = Libro
-        fields = ['id_libro', 'titulo', 'autor', 'isbn', 'cantidad', 'id_categoria']
+        fields = ['id_libro', 'titulo', 'autor', 'isbn', 'cantidad', 'id_categoria',
+                  'anio', 'editorial', 'descripcion', 'portada']
 
     def validate_isbn(self, value):
         # Mensaje claro en lugar del genérico "Complete los campos vacios":
@@ -34,7 +47,8 @@ class LibroSerializerUpdate(serializers.ModelSerializer):
 
     class Meta:
         model = Libro
-        fields = ['titulo', 'autor', 'isbn', 'cantidad', 'id_categoria']
+        fields = ['id_libro', 'titulo', 'autor', 'isbn', 'cantidad', 'id_categoria',
+                  'anio', 'editorial', 'descripcion', 'portada', 'activo']
 
     def validate_isbn(self, value):
         # En update se excluye el propio registro para que reenviar el mismo
