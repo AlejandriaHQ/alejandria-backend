@@ -26,6 +26,15 @@ class Libro(models.Model):
     titulo = models.CharField(max_length=150)
     autor = models.CharField(max_length=150)
     isbn = models.CharField(max_length=20, unique=True, blank=True, null=True)
+    # Ficha bibliográfica ampliada (RF-05). Se usa `anio` en español, no `year`.
+    anio = models.IntegerField(blank=True, null=True)  # Año de publicación
+    editorial = models.CharField(max_length=150, blank=True, null=True)
+    descripcion = models.TextField(blank=True, null=True)
+    # Decisión del equipo: la portada se guarda por URL (no se sube el archivo).
+    portada = models.URLField(max_length=500, blank=True, null=True)
+    # Eliminación lógica (RN-06 / RF-07): un libro con préstamos no se borra
+    # físicamente, se desactiva para conservar el historial de préstamos.
+    activo = models.BooleanField(default=True)
     # F10 pentest: tope superior de ejemplares por título. 10000 es generoso
     # para una biblioteca; por encima de eso es casi con seguridad un error de
     # captura. El tope inferior (>= 1) evita stock negativo o cero.
@@ -42,6 +51,22 @@ class Libro(models.Model):
     class Meta:
         db_table = 'libros'
         verbose_name_plural = 'Libros'
+
+    def prestados(self):
+        """Cuenta los préstamos ACTIVOS del libro (Prestado o Atrasado).
+
+        No incluye los devueltos: esos ejemplares ya están de vuelta en el
+        catálogo. ``Prestamo`` se resuelve en tiempo de ejecución (se define
+        más abajo en este mismo módulo), por lo que no hay import circular.
+        """
+        return Prestamo.objects.filter(
+            id_libro=self,
+            estado__in=['Prestado', 'Atrasado'],
+        ).count()
+
+    def disponibles(self):
+        """Ejemplares disponibles = stock total - préstamos activos."""
+        return self.cantidad - self.prestados()
 
     def __str__(self):
         return f"{self.titulo} - {self.autor}"

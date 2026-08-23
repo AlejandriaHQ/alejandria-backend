@@ -10,9 +10,9 @@ class CategoriaAdmin(admin.ModelAdmin):
 
 @admin.register(Libro)
 class LibroAdmin(admin.ModelAdmin):
-    list_display = ('titulo', 'autor', 'isbn', 'cantidad', 'id_categoria')
-    search_fields = ('titulo', 'autor', 'isbn')
-    list_filter = ('id_categoria',)
+    list_display = ('titulo', 'autor', 'isbn', 'anio', 'editorial', 'cantidad', 'id_categoria', 'activo')
+    search_fields = ('titulo', 'autor', 'isbn', 'editorial')
+    list_filter = ('id_categoria', 'activo', 'anio')
 
 
 @admin.register(Usuario)
