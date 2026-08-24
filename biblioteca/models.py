@@ -233,3 +233,52 @@ class Prestamo(models.Model):
 
     def __str__(self):
         return f"Préstamo #{self.id_prestamo} - {self.id_usuario} - {self.id_libro}"
+
+
+class SolicitudPrestamo(models.Model):
+    """Solicitud de préstamo (RF-35).
+
+    Un socio (USR) solicita un libro; un administrador aprueba o rechaza.
+    Al aprobar, se crea un Prestamo validando todas las reglas de negocio
+    (RN-01/02/03/04).
+    """
+    ESTADO_PENDIENTE = 'Pendiente'
+    ESTADO_APROBADA = 'Aprobada'
+    ESTADO_RECHAZADA = 'Rechazada'
+    ESTADO_CANCELADA = 'Cancelada'
+    ESTADOS = [
+        (ESTADO_PENDIENTE, 'Pendiente'),
+        (ESTADO_APROBADA, 'Aprobada'),
+        (ESTADO_RECHAZADA, 'Rechazada'),
+        (ESTADO_CANCELADA, 'Cancelada'),
+    ]
+
+    id_solicitud = models.AutoField(primary_key=True)
+    id_usuario = models.ForeignKey(
+        'Usuario',
+        on_delete=models.PROTECT,
+        db_column='id_usuario',
+        related_name='solicitudes',
+    )
+    id_libro = models.ForeignKey(
+        'Libro',
+        on_delete=models.PROTECT,
+        db_column='id_libro',
+        related_name='solicitudes',
+    )
+    fecha_solicitud = models.DateTimeField(auto_now_add=True)
+    estado = models.CharField(
+        max_length=20,
+        choices=ESTADOS,
+        default=ESTADO_PENDIENTE,
+    )
+    fecha_respuesta = models.DateTimeField(blank=True, null=True)
+    observaciones = models.TextField(blank=True, null=True)
+
+    class Meta:
+        verbose_name = 'Solicitud de préstamo'
+        verbose_name_plural = 'Solicitudes de préstamo'
+        ordering = ['-fecha_solicitud']
+
+    def __str__(self):
+        return f"Solicitud #{self.id_solicitud} - {self.id_usuario} - {self.id_libro} ({self.estado})"
