@@ -217,3 +217,24 @@ class SolicitudPrestamoViewSet(viewsets.ModelViewSet):
 
         serializer = SolicitudPrestamoSerializer(solicitud)
         return Result.Exitosa("Solicitud cancelada", serializer.data, HTTP_200_OK)
+
+    @extend_schema(
+        description='Listar solicitudes de préstamo.',
+        responses={200: OpenApiTypes.OBJECT, 403: OpenApiTypes.OBJECT},
+    )
+    def list(self, request):
+        queryset = self.get_queryset()
+        serializer = SolicitudPrestamoSerializer(queryset, many=True)
+        return Result.Exitosa("Lista de solicitudes", serializer.data, HTTP_200_OK)
+
+    @extend_schema(
+        description='Obtener una solicitud de préstamo por ID.',
+        responses={200: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT, 403: OpenApiTypes.OBJECT},
+    )
+    def retrieve(self, request, pk=None):
+        try:
+            solicitud = self.get_queryset().get(pk=pk)
+        except SolicitudPrestamo.DoesNotExist:
+            return Result.Error("Solicitud no encontrada", 404)
+        serializer = SolicitudPrestamoSerializer(solicitud)
+        return Result.Exitosa("", serializer.data, HTTP_200_OK)
