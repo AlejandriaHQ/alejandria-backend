@@ -82,7 +82,7 @@ CORS_ALLOW_ALL_ORIGINS = _CORS_ALLOW_ALL
 CORS_ALLOWED_ORIGINS = [
     o.strip() for o in os.environ.get(
         'DJANGO_CORS_ALLOWED_ORIGINS',
-        'http://localhost:8100,http://127.0.0.1:8100',
+        'http://localhost:8100,http://127.0.0.1:8100,http://localhost:4200,http://127.0.0.1:4200',
     ).split(',')
     if o.strip()
 ]
