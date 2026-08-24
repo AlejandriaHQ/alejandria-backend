@@ -214,11 +214,11 @@ class LibroViewSet(viewsets.ModelViewSet):
                          autor e isbn (OR entre los tres campos).
         - ``categoria``: id opcional de categoría, filtra por id_categoria (exacto).
         - Si no se pasa ningún filtro se devuelven todos los libros activos.
-        La paginación es de 10 elementos por página y devuelve el envelope
+        La paginación es de 12 elementos por página y devuelve el envelope
         con maxPages/currentpage/previous/next.
         """
         page = request.GET.get('page')
-        pagesize = 10
+        pagesize = 12
         filter = request.GET.get('filter')
         categoria = request.GET.get('categoria')
 

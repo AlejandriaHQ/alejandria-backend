@@ -198,13 +198,13 @@ class LibrosCRUDTests(BaseAPITest):
         self.assertEqual(Libro.objects.count(), 0)
 
     def test_paginador_libros(self):
-        for i in range(12):
+        for i in range(14):
             self.crear_libro(titulo=f'Libro {i}', isbn=f'978-{i:04d}',
                              categoria=self.categoria)
 
         pagina1 = self.client.get(f"{reverse('libro-paginar')}?page=1")
         self.assert_envelope_exitosa(pagina1)
-        self.assertEqual(len(pagina1.data['datos']), PAGE_SIZE)
+        self.assertEqual(len(pagina1.data['datos']), 12)
         self.assertFalse(pagina1.data['previous'])
         self.assertTrue(pagina1.data['next'])
         self.assertEqual(pagina1.data['maxPages'], 2)
