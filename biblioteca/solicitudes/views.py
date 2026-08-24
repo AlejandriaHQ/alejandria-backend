@@ -150,15 +150,25 @@ class SolicitudPrestamoViewSet(viewsets.ModelViewSet):
             solicitud.save(update_fields=['estado', 'fecha_respuesta'])
 
         # Devolver el préstamo creado
-        from ..prestamos.serializers import PrestamoSerializer
-        prestamo_serializer = PrestamoSerializer(prestamo)
-        return Result.Exitosa(
-            "Solicitud aprobada y préstamo creado",
+        prestamo_data = {
+            'id_prestamo': prestamo.id_prestamo,
+            'id_usuario': prestamo.id_usuario.id,
+            'id_libro': prestamo.id_libro.id_libro,
+            'fecha_prestamo': prestamo.fecha_prestamo.isoformat(),
+            'fecha_vencimiento': prestamo.fecha_vencimiento.isoformat(),
+            'estado': prestamo.estado,
+        }
+        from rest_framework.response import Response
+        return Response(
             {
-                'solicitud': SolicitudPrestamoSerializer(solicitud).data,
-                'prestamo': prestamo_serializer.data,
+                "success": True,
+                "Mensaje": "Solicitud aprobada y préstamo creado",
+                "datos": {
+                    'solicitud': SolicitudPrestamoSerializer(solicitud).data,
+                    'prestamo': prestamo_data,
+                },
             },
-            HTTP_200_OK,
+            status=HTTP_200_OK,
         )
 
     @extend_schema(
@@ -185,8 +195,15 @@ class SolicitudPrestamoViewSet(viewsets.ModelViewSet):
         solicitud.fecha_respuesta = date.today()
         solicitud.save(update_fields=['estado', 'fecha_respuesta'])
 
-        serializer = SolicitudPrestamoSerializer(solicitud)
-        return Result.Exitosa("Solicitud rechazada", serializer.data, HTTP_200_OK)
+        from rest_framework.response import Response
+        return Response(
+            {
+                "success": True,
+                "Mensaje": "Solicitud rechazada",
+                "datos": SolicitudPrestamoSerializer(solicitud).data,
+            },
+            status=HTTP_200_OK,
+        )
 
     @extend_schema(
         description='Cancelar una solicitud de préstamo (USR dueño o ADM).',
@@ -215,26 +232,49 @@ class SolicitudPrestamoViewSet(viewsets.ModelViewSet):
         solicitud.fecha_respuesta = date.today()
         solicitud.save(update_fields=['estado', 'fecha_respuesta'])
 
-        serializer = SolicitudPrestamoSerializer(solicitud)
-        return Result.Exitosa("Solicitud cancelada", serializer.data, HTTP_200_OK)
+        from rest_framework.response import Response
+        return Response(
+            {
+                "success": True,
+                "Mensaje": "Solicitud cancelada",
+                "datos": SolicitudPrestamoSerializer(solicitud).data,
+            },
+            status=HTTP_200_OK,
+        )
 
     @extend_schema(
         description='Listar solicitudes de préstamo.',
         responses={200: OpenApiTypes.OBJECT, 403: OpenApiTypes.OBJECT},
     )
     def list(self, request):
+        from rest_framework.response import Response
         queryset = self.get_queryset()
         serializer = SolicitudPrestamoSerializer(queryset, many=True)
-        return Result.Exitosa("Lista de solicitudes", serializer.data, HTTP_200_OK)
+        return Response(
+            {
+                "success": True,
+                "Mensaje": "Lista de solicitudes",
+                "datos": serializer.data,
+            },
+            status=HTTP_200_OK,
+        )
 
     @extend_schema(
         description='Obtener una solicitud de préstamo por ID.',
         responses={200: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT, 403: OpenApiTypes.OBJECT},
     )
     def retrieve(self, request, pk=None):
+        from rest_framework.response import Response
         try:
             solicitud = self.get_queryset().get(pk=pk)
         except SolicitudPrestamo.DoesNotExist:
             return Result.Error("Solicitud no encontrada", 404)
         serializer = SolicitudPrestamoSerializer(solicitud)
-        return Result.Exitosa("", serializer.data, HTTP_200_OK)
+        return Response(
+            {
+                "success": True,
+                "Mensaje": "",
+                "datos": serializer.data,
+            },
+            status=HTTP_200_OK,
+        )
