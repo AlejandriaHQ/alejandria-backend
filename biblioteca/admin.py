@@ -4,15 +4,16 @@ from .models import Categoria, Libro, Usuario, Prestamo
 
 @admin.register(Categoria)
 class CategoriaAdmin(admin.ModelAdmin):
-    list_display = ('nombre', 'descripcion')
+    list_display = ('nombre', 'descripcion', 'activo')
     search_fields = ('nombre', 'descripcion')
+    list_filter = ('activo',)
 
 
 @admin.register(Libro)
 class LibroAdmin(admin.ModelAdmin):
-    list_display = ('titulo', 'autor', 'isbn', 'cantidad', 'id_categoria')
-    search_fields = ('titulo', 'autor', 'isbn')
-    list_filter = ('id_categoria',)
+    list_display = ('titulo', 'autor', 'isbn', 'anio', 'editorial', 'cantidad', 'id_categoria', 'activo')
+    search_fields = ('titulo', 'autor', 'isbn', 'editorial')
+    list_filter = ('id_categoria', 'activo', 'anio')
 
 
 @admin.register(Usuario)

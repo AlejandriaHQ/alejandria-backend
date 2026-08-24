@@ -10,6 +10,9 @@ class Categoria(models.Model):
     id_categoria = models.AutoField(primary_key=True)
     nombre = models.CharField(max_length=100)
     descripcion = models.CharField(max_length=255, blank=True, null=True)
+    # Eliminación lógica (RN-07 / RF-10): una categoría con libros no se borra
+    # físicamente (PROTECT); se desactiva para no romper los libros asociados.
+    activo = models.BooleanField(default=True)
 
     class Meta:
         db_table = 'categorias'
@@ -26,6 +29,15 @@ class Libro(models.Model):
     titulo = models.CharField(max_length=150)
     autor = models.CharField(max_length=150)
     isbn = models.CharField(max_length=20, unique=True, blank=True, null=True)
+    # Ficha bibliográfica ampliada (RF-05). Se usa `anio` en español, no `year`.
+    anio = models.IntegerField(blank=True, null=True)  # Año de publicación
+    editorial = models.CharField(max_length=150, blank=True, null=True)
+    descripcion = models.TextField(blank=True, null=True)
+    # Decisión del equipo: la portada se guarda por URL (no se sube el archivo).
+    portada = models.URLField(max_length=500, blank=True, null=True)
+    # Eliminación lógica (RN-06 / RF-07): un libro con préstamos no se borra
+    # físicamente, se desactiva para conservar el historial de préstamos.
+    activo = models.BooleanField(default=True)
     # F10 pentest: tope superior de ejemplares por título. 10000 es generoso
     # para una biblioteca; por encima de eso es casi con seguridad un error de
     # captura. El tope inferior (>= 1) evita stock negativo o cero.
@@ -42,6 +54,22 @@ class Libro(models.Model):
     class Meta:
         db_table = 'libros'
         verbose_name_plural = 'Libros'
+
+    def prestados(self):
+        """Cuenta los préstamos ACTIVOS del libro (Prestado o Atrasado).
+
+        No incluye los devueltos: esos ejemplares ya están de vuelta en el
+        catálogo. ``Prestamo`` se resuelve en tiempo de ejecución (se define
+        más abajo en este mismo módulo), por lo que no hay import circular.
+        """
+        return Prestamo.objects.filter(
+            id_libro=self,
+            estado__in=['Prestado', 'Atrasado'],
+        ).count()
+
+    def disponibles(self):
+        """Ejemplares disponibles = stock total - préstamos activos."""
+        return self.cantidad - self.prestados()
 
     def __str__(self):
         return f"{self.titulo} - {self.autor}"
@@ -144,6 +172,10 @@ class Prestamo(models.Model):
         (ESTADO_ATRASADO, 'Atrasado'),
     ]
 
+    # Duración reglamentaria del préstamo (RN-01 / RF-18): 7 días. La fecha
+    # de vencimiento se autocalcula como fecha_prestamo + DIAS_PRESTAMO.
+    DIAS_PRESTAMO = 7
+
     id_prestamo = models.AutoField(primary_key=True)
     # FK al AUTH_USER_MODEL (Ahora Usuario es AbstractUser). Se mantiene el
     # atributo Python id_usuario con db_column='id_usuario' para no romper el
@@ -161,7 +193,22 @@ class Prestamo(models.Model):
         db_column='id_libro'
     )
     fecha_prestamo = models.DateField()
+    # Fecha reglamentaria de vencimiento (RN-01 / RF-18): fecha_prestamo + 7
+    # días. Se autocalcula en el serializer al crear/actualizar el préstamo
+    # (el cliente no la envía: es el due date normativo). Usada para detectar
+    # préstamos vencidos (Prestado -> Atrasado) y devoluciones vencidas.
+    fecha_vencimiento = models.DateField(blank=True, null=True)
+    # Fecha límite de devolución que el cliente/panel declara como esperada
+    # (compatibilidad con el contrato actual del frontend). Por RN-01 no puede
+    # superar la fecha_vencimiento (7 días). Si el cliente no la envía, el
+    # vencimiento normativo es fecha_vencimiento.
     fecha_devolucion = models.DateField(blank=True, null=True)
+    # Fecha REAL en que el préstamo fue devuelto (RF-22 / CU-12). Solo se
+    # rellena al pasar el préstamo a estado Devuelto (la registra el admin).
+    fecha_devolucion_real = models.DateField(blank=True, null=True)
+    # Flag que indica si el préstamo se devolvió DESPUÉS de su vencimiento
+    # (RF-22). Sin multa en esta etapa: solo se informa para el historial.
+    devuelto_vencido = models.BooleanField(default=False)
     estado = models.CharField(
         max_length=20,
         choices=ESTADOS,
@@ -174,12 +221,64 @@ class Prestamo(models.Model):
 
     def marcar_atrasado_si_aplica(self):
         # Transición automática Prestado -> Atrasado cuando la fecha de
-        # devolución ya venció. NO afecta el stock: solo Prestado -> Devuelto
-        # devuelve ejemplares; un préstamo Atrasado mantiene el ejemplar fuera
-        # del stock hasta que sea devuelto.
-        if self.estado == self.ESTADO_PRESTADO and self.fecha_devolucion and self.fecha_devolucion < date.today():
+        # vencimiento ya pasó. La fecha canónica es fecha_vencimiento; para
+        # registros creados por fuera del serializer (sin fecha_vencimiento)
+        # se cae a fecha_devolucion como límite histórico. NO afecta el stock:
+        # solo Prestado -> Devuelto devuelve ejemplares; un préstamo Atrasado
+        # mantiene el ejemplar fuera del stock hasta que sea devuelto.
+        fecha_limite = self.fecha_vencimiento or self.fecha_devolucion
+        if self.estado == self.ESTADO_PRESTADO and fecha_limite and fecha_limite < date.today():
             self.estado = self.ESTADO_ATRASADO
             self.save(update_fields=['estado'])
 
     def __str__(self):
         return f"Préstamo #{self.id_prestamo} - {self.id_usuario} - {self.id_libro}"
+
+
+class SolicitudPrestamo(models.Model):
+    """Solicitud de préstamo (RF-35).
+
+    Un socio (USR) solicita un libro; un administrador aprueba o rechaza.
+    Al aprobar, se crea un Prestamo validando todas las reglas de negocio
+    (RN-01/02/03/04).
+    """
+    ESTADO_PENDIENTE = 'Pendiente'
+    ESTADO_APROBADA = 'Aprobada'
+    ESTADO_RECHAZADA = 'Rechazada'
+    ESTADO_CANCELADA = 'Cancelada'
+    ESTADOS = [
+        (ESTADO_PENDIENTE, 'Pendiente'),
+        (ESTADO_APROBADA, 'Aprobada'),
+        (ESTADO_RECHAZADA, 'Rechazada'),
+        (ESTADO_CANCELADA, 'Cancelada'),
+    ]
+
+    id_solicitud = models.AutoField(primary_key=True)
+    id_usuario = models.ForeignKey(
+        'Usuario',
+        on_delete=models.PROTECT,
+        db_column='id_usuario',
+        related_name='solicitudes',
+    )
+    id_libro = models.ForeignKey(
+        'Libro',
+        on_delete=models.PROTECT,
+        db_column='id_libro',
+        related_name='solicitudes',
+    )
+    fecha_solicitud = models.DateTimeField(auto_now_add=True)
+    estado = models.CharField(
+        max_length=20,
+        choices=ESTADOS,
+        default=ESTADO_PENDIENTE,
+    )
+    fecha_respuesta = models.DateTimeField(blank=True, null=True)
+    observaciones = models.TextField(blank=True, null=True)
+
+    class Meta:
+        verbose_name = 'Solicitud de préstamo'
+        verbose_name_plural = 'Solicitudes de préstamo'
+        ordering = ['-fecha_solicitud']
+
+    def __str__(self):
+        return f"Solicitud #{self.id_solicitud} - {self.id_usuario} - {self.id_libro} ({self.estado})"

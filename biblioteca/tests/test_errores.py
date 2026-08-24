@@ -16,7 +16,7 @@ from rest_framework.status import (
     HTTP_404_NOT_FOUND,
 )
 
-from biblioteca.models import Prestamo, Usuario
+from biblioteca.models import Categoria, Prestamo, Usuario
 from biblioteca.tests.helpers import BaseAPITest
 
 
@@ -60,14 +60,20 @@ class CategoriasErroresTests(BaseAPITest):
         self.assert_envelope_error(response)
 
     def test_eliminar_categoria_con_libros_asociados(self):
-        # ProtectedError: no se puede eliminar una categoría con libros.
+        # RN-07 / RF-10: una categoría con libros asociados NO se elimina
+        # físicamente (la FK de Libro usa PROTECT); se desactiva mediante
+        # eliminación lógica para conservar los libros que la referencian.
         categoria = self.crear_categoria(nombre='Ficción')
         self.crear_libro(titulo='Dune', isbn='978-1', categoria=categoria)
 
         response = self.client.delete(
             reverse('categoria-detail', args=[categoria.id_categoria]))
 
-        self.assert_envelope_error(response)
+        self.assert_envelope_exitosa(response)
+        categoria.refresh_from_db()
+        self.assertFalse(categoria.activo)
+        # La categoría sigue existiendo en la BD (no se borró físicamente).
+        self.assertTrue(Categoria.objects.filter(pk=categoria.pk).exists())
 
 
 class LibrosErroresTests(BaseAPITest):
@@ -78,11 +84,11 @@ class LibrosErroresTests(BaseAPITest):
         self.categoria = self.crear_categoria(nombre='Ficción')
 
     def test_isbn_duplicado(self):
-        self.crear_libro(titulo='Dune', isbn='978-1', categoria=self.categoria)
+        self.crear_libro(titulo='Dune', isbn='9780306406157', categoria=self.categoria)
 
         response = self.client.post(
             reverse('libro-list'),
-            {'titulo': 'Otro libro', 'autor': 'Otro autor', 'isbn': '978-1',
+            {'titulo': 'Otro libro', 'autor': 'Otro autor', 'isbn': '9780306406157',
              'id_categoria': self.categoria.id_categoria},
             format='json',
         )
@@ -95,7 +101,7 @@ class LibrosErroresTests(BaseAPITest):
     def test_cantidad_cero(self):
         response = self.client.post(
             reverse('libro-list'),
-            {'titulo': 'Dune', 'autor': 'Frank Herbert', 'isbn': '978-2',
+            {'titulo': 'Dune', 'autor': 'Frank Herbert', 'isbn': '9780451524935',
              'cantidad': 0, 'id_categoria': self.categoria.id_categoria},
             format='json',
         )
@@ -105,7 +111,7 @@ class LibrosErroresTests(BaseAPITest):
     def test_cantidad_negativa(self):
         response = self.client.post(
             reverse('libro-list'),
-            {'titulo': 'Dune', 'autor': 'Frank Herbert', 'isbn': '978-3',
+            {'titulo': 'Dune', 'autor': 'Frank Herbert', 'isbn': '9780743273565',
              'cantidad': -3, 'id_categoria': self.categoria.id_categoria},
             format='json',
         )
@@ -116,7 +122,7 @@ class LibrosErroresTests(BaseAPITest):
         # F10 pentest: por encima del tope superior (10000) se rechaza con 400.
         response = self.client.post(
             reverse('libro-list'),
-            {'titulo': 'Dune', 'autor': 'Frank Herbert', 'isbn': '978-9',
+            {'titulo': 'Dune', 'autor': 'Frank Herbert', 'isbn': '9780060935467',
              'cantidad': 10001, 'id_categoria': self.categoria.id_categoria},
             format='json',
         )
@@ -453,20 +459,22 @@ class PrestamosErroresTests(BaseAPITest):
         self.assert_envelope_error(response)
 
     def test_fecha_prestamo_fuera_de_rango_rechazada(self):
-        # F12 pentest: una fecha de préstamo muy retroactiva (hace más de un
-        # año) o demasiado futura se rechaza con 400 y un mensaje claro.
+        # RN-01 / RF-18: la duración máxima del préstamo es 7 días. Si el
+        # cliente declara una fecha_devolucion que excede 7 días desde
+        # fecha_prestamo se rechaza con 400 y un mensaje claro. Sustituye al
+        # antiguo rango absoluto ±365 (F12) del modelo de préstamos sin tope.
         hoy = date.today()
-        for dias in (-400, 400):
-            response = self.client.post(
-                reverse('prestamo-list'),
-                {'id_usuario': self.usuario.id,
-                 'id_libro': self.libro.id_libro,
-                 'fecha_prestamo': (hoy + timedelta(days=dias)).isoformat()},
-                format='json',
-            )
+        response = self.client.post(
+            reverse('prestamo-list'),
+            {'id_usuario': self.usuario.id,
+             'id_libro': self.libro.id_libro,
+             'fecha_prestamo': hoy.isoformat(),
+             'fecha_devolucion': (hoy + timedelta(days=8)).isoformat()},
+            format='json',
+        )
 
-            self.assert_envelope_error(response)
-            self.assertIn('fecha_prestamo', response.data['Mensaje'])
+        self.assert_envelope_error(response)
+        self.assertIn('fecha_devolucion', response.data['Mensaje'])
 
     def test_view_inexistente(self):
         response = self.client.get(reverse('prestamo-detail', args=[9999]))

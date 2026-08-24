@@ -2,10 +2,10 @@ from datetime import date
 
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
-from django.db.models import Q, ProtectedError, F
+from django.db.models import Q, ProtectedError
 from rest_framework import viewsets
 from rest_framework.decorators import action
-from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED
+from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED, HTTP_403_FORBIDDEN
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 
@@ -32,6 +32,21 @@ def _obtener_o_none(queryset, pk):
         return None
 
 
+# PROTECCIÓN DE ESCRITURA (roles) — RN-05 / RFC-25: solo un usuario con
+# role='admin' (o is_staff) puede REGISTRAR préstamos y devoluciones
+# (create/update/destroy). La lectura (list/retrieve/paginar) queda abierta a
+# cualquier usuario autenticado (IsAuthenticated global en settings), y las
+# acciones historial/vencidos tienen su propia regla de acceso.
+# Se implementa con LÓGICA EN LA VISTA (y no con permission_classes de DRF)
+# para mantener el envelope JSON {success, Mensaje, datos} consistente:
+# PermissionDenied lanzaría un 403 con el body por defecto de DRF, fuera del
+# contrato que consume el frontend. La comprobación es role=='admin' OR
+# is_staff, igual que en Usuarios: así los superusuarios de Django también
+# registran préstamos sin depender de su campo role.
+def _permiso_escritura_prestamos(request):
+    return request.user.role == 'admin' or request.user.is_staff
+
+
 page_paramView = OpenApiParameter(
     'page',
     OpenApiTypes.INT,
@@ -49,12 +64,23 @@ filter_paramView = OpenApiParameter(
 
 def _normalizar_atrasados():
     # Transición automática Prestado -> Atrasado: se actualiza en masa antes
-    # de devolver los datos (sin afectar el stock: solo Prestado -> Devuelto
-    # devuelve ejemplares; un préstamo Atrasado mantiene el ejemplar fuera
-    # del stock hasta que sea devuelto).
-    Prestamo.objects.filter(
-        estado='Prestado', fecha_devolucion__lt=date.today()
+    # de devolver los datos. La fecha canónica de vencimiento es
+    # fecha_vencimiento; para registros creados fuera del serializer (sin
+    # fecha_vencimiento) se cae a fecha_devolucion como límite histórico.
+    # NO afecta el stock: solo Prestado -> Devuelto devuelve ejemplares; un
+    # préstamo Atrasado mantiene el ejemplar fuera del stock hasta que se
+    # devuelva.
+    hoy = date.today()
+    Prestamo.objects.filter(estado='Prestado').filter(
+        Q(fecha_vencimiento__isnull=False, fecha_vencimiento__lt=hoy) |
+        Q(fecha_vencimiento__isnull=True, fecha_devolucion__isnull=False, fecha_devolucion__lt=hoy)
     ).update(estado='Atrasado')
+
+
+# RN-02 / RF-20: número máximo de ejemplares prestados simultáneamente a un
+# mismo socio. Se cuenta sobre préstamos ACTIVOS (Prestado o Atrasado): los
+# devueltos no ocupan cuota.
+MAX_PRESTAMOS_SIMULTANEOS = 3
 
 
 @extend_schema(tags=['prestamos'])
@@ -75,8 +101,12 @@ class PrestamoViewSet(viewsets.ModelViewSet):
     @extend_schema(
         description='Añade un nuevo prestamo.',
         request=PrestamoSerializerReg,
-        responses={201: PrestamoSerializerReg, 400: OpenApiTypes.OBJECT})
+        responses={201: PrestamoSerializerReg, 400: OpenApiTypes.OBJECT, 403: OpenApiTypes.OBJECT})
     def create(self, request):
+        # RN-05 / RFC-25: solo un administrador puede registrar préstamos.
+        if not _permiso_escritura_prestamos(request):
+            return Result.Error("No tiene permisos para realizar esta acción", HTTP_403_FORBIDDEN)
+
         id_usuario = request.data.get('id_usuario')
         id_libro = request.data.get('id_libro')
         fecha_prestamo = request.data.get('fecha_prestamo')
@@ -96,24 +126,42 @@ class PrestamoViewSet(viewsets.ModelViewSet):
 
         if serialData.is_valid():
             try:
-                # Regla de stock: se valida disponibilidad y se decrementa el stock
-                # de forma atómica dentro de una transacción (select_for_update
-                # bloquea la fila del libro para evitar condiciones de carrera).
+                # Regla de stock (DECISIÓN (b)): `cantidad` es el STOCK TOTAL
+                # (fijo) del libro y NUNCA cambia al prestar/devolver. La
+                # disponibilidad se DERIVA de los préstamos activos:
+                # disponibles = cantidad - prestados(). Por eso aquí solo se
+                # valida la disponibilidad real dentro de una transacción
+                # atómica (select_for_update bloquea la fila del libro para
+                # evitar condiciones de carrera) y NO se decrementa cantidad.
                 with transaction.atomic():
+                    # RN-04 / RF-25: bloqueo por préstamos vencidos. Si el socio
+                    # tiene algún préstamo Atrasado (no devuelto), no puede tomar
+                    # nuevos préstamos. Se comprueba como puerta dura antes de
+                    # validar stock y límite de ejemplares.
+                    if Prestamo.objects.filter(id_usuario_id=id_usuario, estado='Atrasado').exists():
+                        return Result.Error("El usuario tiene préstamos vencidos y no puede tomar nuevos préstamos", 400)
+
                     libro = Libro.objects.select_for_update().get(pk=id_libro)
 
-                    if libro.cantidad < 1:
+                    if libro.disponibles() <= 0:
                         return Result.Error("No hay ejemplares disponibles de este libro", 400)
 
+                    # RN-02 / RF-20: máximo de 3 ejemplares simultáneos por usuario.
+                    # Se cuentan los préstamos ACTIVOS (Prestado/Atrasado); los
+                    # devueltos no ocupan cuota.
+                    activos = Prestamo.objects.filter(
+                        id_usuario_id=id_usuario,
+                        estado__in=['Prestado', 'Atrasado'],
+                    ).count()
+                    if activos >= MAX_PRESTAMOS_SIMULTANEOS:
+                        return Result.Error("El usuario ya tiene el máximo de 3 ejemplares prestados", 400)
+
                     serialData.save()
-                    # Decremento atómico del stock al prestar (nunca baja de 0
-                    # porque ya se validó cantidad >= 1 dentro de la transacción).
-                    Libro.objects.filter(pk=id_libro).update(cantidad=F('cantidad') - 1)
             except IntegrityError:
                 return Result.Error("Ya existe un registro con ese valor único", 400)
         else:
             # Se devuelven los errores del serializer (p. ej. fecha de préstamo
-            # fuera de rango F12) en lugar del mensaje genérico y engañoso;
+            # fuera de rango) en lugar del mensaje genérico y engañoso;
             # mismo patrón que libros y usuarios.
             return Result.Error(serialData.errors)
 
@@ -134,8 +182,13 @@ class PrestamoViewSet(viewsets.ModelViewSet):
     @extend_schema(
         description="Actualiza un prestamo.",
         request=PrestamoSerializerUpdate,
-        responses={200: PrestamoSerializerUpdate, 400: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT})
+        responses={200: PrestamoSerializerUpdate, 400: OpenApiTypes.OBJECT, 403: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT})
     def update(self, request, pk=None):
+        # RN-05 / RFC-25: solo un administrador puede actualizar (incluída la
+        # devolución) un préstamo.
+        if not _permiso_escritura_prestamos(request):
+            return Result.Error("No tiene permisos para realizar esta acción", HTTP_403_FORBIDDEN)
+
         # Transición automática Prestado -> Atrasado: se aplica también en update
         # para que un préstamo vencido muestre su estado consistente tras editarse.
         _normalizar_atrasados()
@@ -161,29 +214,22 @@ class PrestamoViewSet(viewsets.ModelViewSet):
         if not prestamo:
             return Result.Error("Registro no encontrado", 404)
 
-        # Estado previo para decidir el ajuste de stock tras la actualización
-        estado_anterior = prestamo.estado
-
         serialData = PrestamoSerializerUpdate(instance=prestamo, data=request.data)
 
         if serialData.is_valid():
             try:
                 with transaction.atomic():
                     serialData.save()
-                    # Regla de stock según el cambio de estado:
-                    #  - Pasa a Devuelto (antes no lo era): el ejemplar vuelve al stock.
-                    #  - Deja de estar Devuelto: el ejemplar vuelve a estar prestado,
-                    #    se decrementa (con guard para no bajar de 0).
-                    nuevo_estado = prestamo.estado  # tras save() el instance ya refleja el nuevo valor
-                    if estado_anterior != 'Devuelto' and nuevo_estado == 'Devuelto':
-                        Libro.objects.filter(pk=prestamo.id_libro_id).update(cantidad=F('cantidad') + 1)
-                    elif estado_anterior == 'Devuelto' and nuevo_estado != 'Devuelto':
-                        Libro.objects.filter(pk=prestamo.id_libro_id, cantidad__gt=0).update(cantidad=F('cantidad') - 1)
+                    # Regla de stock (DECISIÓN (b)): NO se ajusta `cantidad` al
+                    # actualizar. La disponibilidad se deriva de los préstamos
+                    # activos (prestados()), por lo que al pasar a Devuelto el
+                    # ejemplar vuelve a estar disponible automáticamente (el
+                    # contador prestados() deja de incluirlo), sin tocar stock.
             except IntegrityError:
                 return Result.Error("Ya existe un registro con ese valor único", 400)
         else:
             # Se devuelven los errores del serializer (p. ej. fecha de préstamo
-            # fuera de rango F12) en lugar del mensaje genérico y engañoso;
+            # fuera de rango) en lugar del mensaje genérico y engañoso;
             # mismo patrón que libros y usuarios.
             return Result.Error(serialData.errors)
 
@@ -191,8 +237,12 @@ class PrestamoViewSet(viewsets.ModelViewSet):
 
     @extend_schema(
         description="Eliminar un prestamo",
-        responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT})
+        responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT, 403: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT})
     def destroy(self, request, pk=None):
+        # RN-05 / RFC-25: solo un administrador puede eliminar préstamos.
+        if not _permiso_escritura_prestamos(request):
+            return Result.Error("No tiene permisos para realizar esta acción", HTTP_403_FORBIDDEN)
+
         # Transición automática Prestado -> Atrasado: se aplica también en delete
         # para mantener el estado consistente antes de eliminar.
         _normalizar_atrasados()
@@ -201,11 +251,10 @@ class PrestamoViewSet(viewsets.ModelViewSet):
         if not prestamo:
             return Result.Error("Registro no encontrado", 404)
 
-        # Regla de stock: si el préstamo aún no estaba devuelto (Prestado/Atrasado),
-        # el ejemplar estaba fuera del stock, por lo que al eliminar se devuelve.
-        if prestamo.estado != 'Devuelto':
-            Libro.objects.filter(pk=prestamo.id_libro_id).update(cantidad=F('cantidad') + 1)
-
+        # Regla de stock (DECISIÓN (b)): NO se ajusta `cantidad` al eliminar.
+        # Al borrar un préstamo activo (Prestado/Atrasado) el contador
+        # prestados() deja de incluirlo, por lo que la disponibilidad se
+        # recupera automáticamente sin tocar el stock total.
         try:
             prestamo.delete()
         except ProtectedError:
@@ -259,3 +308,52 @@ class PrestamoViewSet(viewsets.ModelViewSet):
         serialdata = PrestamoSerializer(page_obj, many=True)
 
         return Result.ResponsePaginator('', serialdata.data, total_pages, page, button_previous, button_next)
+
+    @extend_schema(
+        description="Historial del socio (RF-24 / CU-14).",
+        parameters=[
+            OpenApiParameter('usuario', OpenApiTypes.INT, OpenApiParameter.QUERY, description="ID del usuario"),
+            OpenApiParameter('estado', OpenApiTypes.STR, OpenApiParameter.QUERY, description="Filtrar por estado"),
+        ],
+        responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT, 403: OpenApiTypes.OBJECT})
+    @action(detail=False, methods=['get'], url_path='historial')
+    def historial(self, request):
+        # RF-24 / CU-14: historial de préstamos de un socio. Un usuario con
+        # role='user' solo puede ver SU propio historial; un admin
+        # (role=='admin' o is_staff) puede ver el de cualquier socio. La
+        # lectura respeta el envelope y el acceso por rol ya definido.
+        _normalizar_atrasados()
+        es_admin = _permiso_escritura_prestamos(request)
+        usuario_id = request.GET.get('usuario')
+        if not es_admin:
+            # Usuario normal: se ignora el parámetro y se fuerza su propio id.
+            usuario_id = request.user.pk
+        if not usuario_id:
+            return Result.Error("Debe indicar el usuario")
+        try:
+            usuario_id = int(usuario_id)
+        except (ValueError, TypeError):
+            return Result.Error("El parámetro usuario debe ser un número entero")
+
+        qs = Prestamo.objects.filter(id_usuario_id=usuario_id)
+        estado = request.GET.get('estado')
+        if estado:
+            qs = qs.filter(estado=estado)
+        qs = qs.order_by('-fecha_prestamo')
+        serializer = PrestamoSerializer(qs, many=True)
+        return Result.Exitosa("Historial de préstamos", serializer.data)
+
+    @extend_schema(
+        description="Listar préstamos vencidos (RF-23 / CU-13). Solo administradores.",
+        responses={200: OpenApiTypes.OBJECT, 403: OpenApiTypes.OBJECT})
+    @action(detail=False, methods=['get'], url_path='vencidos')
+    def vencidos(self, request):
+        # RF-23 / CU-13: listar préstamos vencidos. Acción de solo lectura pero
+        # expone deuda de socios: solo la ejecuta un administrador.
+        if not _permiso_escritura_prestamos(request):
+            return Result.Error("No tiene permisos para realizar esta acción", HTTP_403_FORBIDDEN)
+
+        _normalizar_atrasados()
+        qs = Prestamo.objects.filter(estado='Atrasado').order_by('fecha_vencimiento')
+        serializer = PrestamoSerializer(qs, many=True)
+        return Result.Exitosa("Préstamos vencidos", serializer.data)
