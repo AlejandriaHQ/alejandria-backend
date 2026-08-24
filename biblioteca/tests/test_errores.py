@@ -427,10 +427,43 @@ class UsuariosProteccionRolesTests(BaseAPITest):
         self.assert_envelope_error(response, HTTP_403_FORBIDDEN)
         self.assertEqual(Usuario.objects.count(), 1)
 
-    def test_usuario_comun_si_puede_leer(self):
-        # La lectura queda abierta a cualquier usuario autenticado.
+    def test_usuario_comun_no_puede_listar(self):
+        # La lectura masiva de todos los socios quedó restringida a solo admin.
         self.autenticar_como(self.usuario_comun)
 
+        response = self.client.get(reverse('usuario-list'))
+
+        self.assert_envelope_error(response, HTTP_403_FORBIDDEN)
+
+    def test_usuario_comun_no_puede_retrieve_otro(self):
+        # Un usuario común no puede consultar el perfil de otro socio.
+        self.autenticar_como(self.usuario_comun)
+
+        response = self.client.get(
+            reverse('usuario-detail', args=[self.usuario_comun.id]))
+
+        self.assert_envelope_error(response, HTTP_403_FORBIDDEN)
+
+    def test_usuario_comun_no_puede_paginar(self):
+        # La paginación de socios también queda restringida a solo admin.
+        self.autenticar_como(self.usuario_comun)
+
+        response = self.client.get(f"{reverse('usuario-paginar')}?page=1")
+
+        self.assert_envelope_error(response, HTTP_403_FORBIDDEN)
+
+    def test_usuario_comun_puede_ver_su_perfil_me(self):
+        # Cualquier usuario autenticado (admin o común) puede consultar su
+        # propio perfil vía /usuarios/me/ sin exponer los datos de los demás.
+        self.autenticar_como(self.usuario_comun)
+
+        response = self.client.get(reverse('usuario-me'))
+
+        self.assert_envelope_exitosa(response)
+        self.assertEqual(response.data['datos']['id'], self.usuario_comun.id)
+
+    def test_admin_si_puede_listar(self):
+        # El admin (auth del setUp) sí puede listar todos los usuarios.
         response = self.client.get(reverse('usuario-list'))
 
         self.assert_envelope_exitosa(response)
