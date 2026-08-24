@@ -1,6 +1,7 @@
 from datetime import date, timedelta
 
 from django.db import transaction
+from django.utils import timezone
 from django.db.models import Q
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -146,7 +147,8 @@ class SolicitudPrestamoViewSet(viewsets.ModelViewSet):
             )
             # Actualizar la solicitud
             solicitud.estado = SolicitudPrestamo.ESTADO_APROBADA
-            solicitud.fecha_respuesta = hoy
+            # fecha_respuesta es DateTimeField: se usa un datetime aware, no un date.
+            solicitud.fecha_respuesta = timezone.now()
             solicitud.save(update_fields=['estado', 'fecha_respuesta'])
 
         # Devolver el préstamo creado
@@ -192,7 +194,8 @@ class SolicitudPrestamoViewSet(viewsets.ModelViewSet):
             )
 
         solicitud.estado = SolicitudPrestamo.ESTADO_RECHAZADA
-        solicitud.fecha_respuesta = date.today()
+        # fecha_respuesta es DateTimeField: datetime aware, no un date.
+        solicitud.fecha_respuesta = timezone.now()
         solicitud.save(update_fields=['estado', 'fecha_respuesta'])
 
         from rest_framework.response import Response
@@ -229,7 +232,8 @@ class SolicitudPrestamoViewSet(viewsets.ModelViewSet):
             )
 
         solicitud.estado = SolicitudPrestamo.ESTADO_CANCELADA
-        solicitud.fecha_respuesta = date.today()
+        # fecha_respuesta es DateTimeField: datetime aware, no un date.
+        solicitud.fecha_respuesta = timezone.now()
         solicitud.save(update_fields=['estado', 'fecha_respuesta'])
 
         from rest_framework.response import Response
