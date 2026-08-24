@@ -211,6 +211,9 @@ class UsuarioViewSet(viewsets.ModelViewSet):
         responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT})
     @action(detail=False, methods=['get'], url_path='paginar')
     def paginar(self, request):
+        if not _permiso_escritura_usuarios(request):
+            return Result.Error("No tiene permisos para realizar esta acción", HTTP_403_FORBIDDEN)
+
         page = request.GET.get('page')
         pagesize = 10
         filter = request.GET.get('filter')
@@ -250,3 +253,12 @@ class UsuarioViewSet(viewsets.ModelViewSet):
         serialdata = UsuarioSerializer(page_obj, many=True)
 
         return Result.ResponsePaginator('', serialdata.data, total_pages, page, button_previous, button_next)
+
+    @extend_schema(
+        description="Obtener el perfil del usuario autenticado",
+        responses={200: OpenApiTypes.OBJECT})
+    @action(detail=False, methods=['get'], url_path='me')
+    def me(self, request):
+        """Permite a cualquier usuario autenticado (admin o user) consultar
+        solo su propio perfil, sin exponer los datos de los demás socios."""
+        return Result.Exitosa("Perfil del usuario", UsuarioSerializer(request.user).data, HTTP_200_OK)
