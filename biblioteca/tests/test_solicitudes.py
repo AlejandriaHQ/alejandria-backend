@@ -225,7 +225,7 @@ class SolicitudesTests(BaseAPITest):
         self._crear_solicitud()  # solicitud de usuario
 
         self.autenticar_como(self.usuario2)
-        self._crear_solicitud()  # solicitud de usuario2
+        self._crear_solicitud(usuario=self.usuario2)  # solicitud de usuario2
 
         # Usuario ve solo las suyas
         self.autenticar_como(self.usuario)
@@ -240,7 +240,7 @@ class SolicitudesTests(BaseAPITest):
         self.autenticar_como(self.usuario)
         self._crear_solicitud()
         self.autenticar_como(self.usuario2)
-        self._crear_solicitud()
+        self._crear_solicitud(usuario=self.usuario2)
 
         self.autenticar_como(self.admin)
         response = self.client.get(reverse('solicitud-list'))

@@ -25,8 +25,10 @@ from .serializers import (
 # Solo un usuario con role='admin' o is_staff puede crear, actualizar o
 # eliminar usuarios; esto incluye la asignación de role='admin' en el payload
 # (un usuario común jamás llega al serializer, ni siquiera con role='admin').
-# La lectura (list/retrieve/paginar) queda abierta a cualquier usuario
-# autenticado (IsAuthenticated global en settings).
+# La lectura masiva de todos los socios (list/retrieve/paginar) también está
+# restringida a solo admin (misma comprobación), para evitar fugas de datos de
+# todos los socios a cuentas role='user'. El endpoint GET /usuarios/me/ permite
+# a cualquier usuario autenticado consultar únicamente su propio perfil.
 # Se implementa con LÓGICA EN LA VISTA (y no con permission_classes de DRF)
 # para mantener el envelope JSON {success, Mensaje, datos} consistente:
 # PermissionDenied lanzaría un 403 con el body por defecto de DRF, fuera del
@@ -75,6 +77,9 @@ class UsuarioViewSet(viewsets.ModelViewSet):
         description="Obtener la lista de usuarios",
         responses={200: OpenApiTypes.OBJECT})
     def list(self, request):
+        if not _permiso_escritura_usuarios(request):
+            return Result.Error("No tiene permisos para realizar esta acción", HTTP_403_FORBIDDEN)
+
         usuarios = Usuario.objects.all()
         serializer = UsuarioSerializer(usuarios, many=True)
         return Result.Exitosa("Lista de usuarios obtenida correctamente", serializer.data)
@@ -129,6 +134,9 @@ class UsuarioViewSet(viewsets.ModelViewSet):
         description="Obtener un usuario por su ID",
         responses={200: UsuarioSerializer, 404: OpenApiTypes.OBJECT})
     def retrieve(self, request, pk=None):
+        if not _permiso_escritura_usuarios(request):
+            return Result.Error("No tiene permisos para realizar esta acción", HTTP_403_FORBIDDEN)
+
         usuario = _obtener_o_none(Usuario.objects, pk)
         if not usuario:
             return Result.Error("Registro no encontrado", 404)
@@ -203,6 +211,9 @@ class UsuarioViewSet(viewsets.ModelViewSet):
         responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT})
     @action(detail=False, methods=['get'], url_path='paginar')
     def paginar(self, request):
+        if not _permiso_escritura_usuarios(request):
+            return Result.Error("No tiene permisos para realizar esta acción", HTTP_403_FORBIDDEN)
+
         page = request.GET.get('page')
         pagesize = 10
         filter = request.GET.get('filter')
@@ -242,3 +253,12 @@ class UsuarioViewSet(viewsets.ModelViewSet):
         serialdata = UsuarioSerializer(page_obj, many=True)
 
         return Result.ResponsePaginator('', serialdata.data, total_pages, page, button_previous, button_next)
+
+    @extend_schema(
+        description="Obtener el perfil del usuario autenticado",
+        responses={200: OpenApiTypes.OBJECT})
+    @action(detail=False, methods=['get'], url_path='me')
+    def me(self, request):
+        """Permite a cualquier usuario autenticado (admin o user) consultar
+        solo su propio perfil, sin exponer los datos de los demás socios."""
+        return Result.Exitosa("Perfil del usuario", UsuarioSerializer(request.user).data, HTTP_200_OK)
