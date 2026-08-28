@@ -57,11 +57,12 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
     def get_token(cls, user):
         token = super().get_token(user)
-        # Claims custom: role (lo consume el frontend para la sesión) e
-        # identifier (credencial visible del socio). El access token copia
-        # estos claims del refresh token (comportamiento de SimpleJWT 5.3+).
+        # Claims custom: role, identifier y nombre del usuario para el frontend
         token['role'] = user.role
         token['identifier'] = user.identifier
+        token['first_name'] = user.first_name
+        token['last_name'] = user.last_name
+        token['name'] = f"{user.first_name} {user.last_name}".strip()
         return token
 
 
